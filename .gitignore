@@ -1,0 +1,21 @@
+# STS/Eclipse
+.settings/
+.project
+.classpath
+.factorypath
+.metadata/
+# Maven
+target/
+**/target/
+# Angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+# Secrets and local data
+.env
+*.log
+**/data/
+*.db
+*.mv.db
+.idea/
+.vscode/
