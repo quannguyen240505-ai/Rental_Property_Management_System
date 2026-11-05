@@ -28,6 +28,9 @@ CREATE TABLE payment_transactions (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
+    CONSTRAINT chk_payment_amount_positive
+        CHECK (amount > 0),
+
     CONSTRAINT uk_payment_transaction_provider
         UNIQUE (provider_transaction_id),
 
@@ -91,6 +94,25 @@ CREATE TABLE deposit_receipts (
     CONSTRAINT uk_deposit_receipt_code
         UNIQUE (receipt_code)
 );
+
+-- Append-only audit history for adjustments to deposit receipts.
+CREATE TABLE deposit_receipt_audit_logs (
+    id CHAR(36) PRIMARY KEY,
+    receipt_id CHAR(36) NOT NULL,
+    changed_by CHAR(36) NOT NULL,
+    change_reason VARCHAR(500) NOT NULL,
+    old_values JSON NOT NULL,
+    new_values JSON NOT NULL,
+    changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_deposit_receipt_audit_receipt
+        FOREIGN KEY (receipt_id)
+        REFERENCES deposit_receipts(id)
+        ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_deposit_receipt_audit_history
+    ON deposit_receipt_audit_logs(receipt_id, changed_at);
 
 CREATE TABLE cash_handovers (
     id CHAR(36) PRIMARY KEY,

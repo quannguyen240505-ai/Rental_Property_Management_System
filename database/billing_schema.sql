@@ -4,6 +4,11 @@ COLLATE utf8mb4_unicode_ci;
 
 USE rental_billing_db;
 
+-- Billing Service validates continuity transactionally: for the same room_id
+-- and utility_type, previous_reading must equal the latest earlier current_reading.
+-- Lock the latest row or serialize writes per meter. Meter replacement/reset
+-- requires meter_replaced=TRUE and a non-empty meter_replacement_reason.
+
 CREATE TABLE utility_readings (
     id CHAR(36) PRIMARY KEY,
     property_id CHAR(36) NOT NULL,
@@ -12,6 +17,8 @@ CREATE TABLE utility_readings (
     utility_type ENUM('ELECTRICITY', 'WATER') NOT NULL,
     previous_reading BIGINT UNSIGNED NOT NULL,
     current_reading BIGINT UNSIGNED NOT NULL,
+    meter_replaced BOOLEAN NOT NULL DEFAULT FALSE,
+    meter_replacement_reason VARCHAR(500),
     evidence_url VARCHAR(500),
     recorded_by CHAR(36) NOT NULL,
     recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -21,6 +28,9 @@ CREATE TABLE utility_readings (
 
     CONSTRAINT chk_reading_not_decrease
         CHECK (current_reading >= previous_reading),
+
+    CONSTRAINT chk_meter_replacement_reason
+        CHECK (meter_replaced = FALSE OR (meter_replacement_reason IS NOT NULL AND CHAR_LENGTH(TRIM(meter_replacement_reason)) > 0)),
 
     CONSTRAINT uk_reading_room_period_type
         UNIQUE (room_id, billing_period, utility_type)
