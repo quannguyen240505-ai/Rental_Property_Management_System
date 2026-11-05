@@ -21,6 +21,7 @@
     </properties>
     <modules>
         <module>service-registry</module>
+        <module>property-service</module>
     </modules>
     <dependencyManagement>
         <dependencies>
