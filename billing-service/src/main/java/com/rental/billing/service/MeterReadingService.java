@@ -10,7 +10,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import org.springframework.dao.DataIntegrityViolationException;
 import com.rental.billing.dto.MeterReadingResponse;
 import com.rental.billing.repository.UtilityReadingRepository;
 import com.rental.billing.dto.MeterReadingRequest;
@@ -107,10 +107,31 @@ public class MeterReadingService {
                 request.meterReplacementReason(),
                 request.evidenceUrl(),
                 recordedBy);
+        try {
+            UtilityReading saved = repository.saveAndFlush(reading);
+            return MeterReadingResponse.fromEntity(saved);
 
-        UtilityReading saved = repository.saveAndFlush(reading);
+        } catch (DataIntegrityViolationException ex) {
+            Throwable cause = ex;
 
-        return MeterReadingResponse.fromEntity(saved);
+            while (cause != null) {
+                if (cause instanceof java.sql.SQLException sql
+                        && sql.getErrorCode() == 1062
+                        && sql.getMessage() != null
+                        && sql.getMessage().contains(
+                                "uk_reading_room_period_type")) {
+
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Phòng đã có chỉ số loại này trong kỳ",
+                            ex);
+                }
+
+                cause = cause.getCause();
+            }
+
+            throw ex;
+        }
     }
     private void requireOwner(Authentication authentication) {
         boolean owner = authentication != null
