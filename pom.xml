@@ -21,6 +21,7 @@
     </properties>
     <modules>
         <module>service-registry</module>
+        <module>rental-service</module>
     </modules>
     <dependencyManagement>
         <dependencies>
