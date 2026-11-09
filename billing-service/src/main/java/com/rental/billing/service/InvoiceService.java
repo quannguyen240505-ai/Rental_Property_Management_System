@@ -143,7 +143,44 @@ public class InvoiceService {
 
         return InvoiceResponse.fromEntity(invoice, lines);
     }
+    @Transactional
+    public InvoiceResponse issue(
+            UUID id,
+            Authentication authentication) {
 
+        requireOwner(authentication);
+
+        Invoice invoice = invoiceRepository
+                .findByIdForUpdate(id.toString())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy hóa đơn"));
+
+        List<InvoiceLine> lines =
+                lineRepository.findByInvoice_IdOrderByIdAsc(
+                        invoice.getId());
+
+        if (lines.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Hóa đơn phải có ít nhất một khoản thu");
+        }
+
+        try {
+            invoice.issue(java.time.LocalDate.now(
+                    java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
+        } catch (IllegalStateException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, ex.getMessage(), ex);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
+
+        invoiceRepository.flush();
+
+        return InvoiceResponse.fromEntity(invoice, lines);
+    }
     private void requireOwner(Authentication authentication) {
         boolean owner = authentication != null
                 && authentication.getAuthorities().stream()

@@ -89,6 +89,25 @@ public class Invoice {
         this.totalAmount = totalAmount;
         this.createdBy = createdBy;
     }
+    public void issue(LocalDate date) {
+        if (status != InvoiceStatus.DRAFT) {
+            throw new IllegalStateException(
+                    "Chỉ được phát hành hóa đơn DRAFT");
+        }
+
+        if (date == null) {
+            throw new IllegalArgumentException(
+                    "Ngày phát hành không được để trống");
+        }
+
+        if (dueDate == null || dueDate.isBefore(date)) {
+            throw new IllegalArgumentException(
+                    "Hạn thanh toán phải từ ngày phát hành trở đi");
+        }
+
+        this.status = InvoiceStatus.ISSUED;
+        this.issueDate = date;
+    }
 
     @PrePersist
     void beforeInsert() {

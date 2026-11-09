@@ -44,4 +44,11 @@ public class InvoiceController {
 
         return service.findById(id, authentication);
     }
+    @PostMapping("/{id}/issue")
+    public InvoiceResponse issue(
+            @PathVariable("id") UUID id,
+            Authentication authentication) {
+
+        return service.issue(id, authentication);
+    }	
 }
