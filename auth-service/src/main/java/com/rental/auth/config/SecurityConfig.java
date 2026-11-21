@@ -27,24 +27,31 @@ import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.*;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
 
 	@Bean
-	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+	public SecurityFilterChain filterChain(HttpSecurity http, @Value("${app.internal.service-key}") String serviceKey)
+			throws Exception {
 
 		return http.csrf(AbstractHttpConfigurer::disable)
 				.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.authorizeHttpRequests(a -> a.requestMatchers("/actuator/health", "/actuator/info").permitAll()
+				.authorizeHttpRequests(a -> a
+
+						.requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
 						.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register",
 								"/api/auth/forgot-password", "/api/auth/reset-password")
 						.permitAll()
 
+						.requestMatchers(HttpMethod.POST, "/internal/auth/introspect").permitAll()
+
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(o -> o.jwt(jwt -> jwt.jwtAuthenticationConverter(authoritiesConverter())))
+				.addFilterBefore(new InternalServiceKeyFilter(serviceKey), BearerTokenAuthenticationFilter.class)
 				.build();
 	}
 

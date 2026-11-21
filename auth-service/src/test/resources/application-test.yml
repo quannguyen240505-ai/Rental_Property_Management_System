@@ -21,6 +21,8 @@ eureka:
 app:
   jwt:
     secret: test-only-jwt-secret-123456789012345678901234567890
+  internal:
+    service-key: test-only-internal-service-key-0123456789abcdef
 
   bootstrap:
     owner:
