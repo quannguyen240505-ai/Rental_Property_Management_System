@@ -1,20 +1,22 @@
 package com.rental.property.service;
 
 import com.rental.property.dto.request.CreateRoomRequest;
+import com.rental.property.dto.request.UpdateRoomRequest;
+import com.rental.property.dto.response.PublicRoomResponse;
 import com.rental.property.dto.response.RoomResponse;
 import com.rental.property.entity.Property;
 import com.rental.property.entity.Room;
 import com.rental.property.entity.RoomStatus;
 import com.rental.property.repository.PropertyRepository;
 import com.rental.property.repository.RoomRepository;
-import com.rental.property.dto.request.UpdateRoomRequest;
-import java.util.List;
-import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class RoomService {
@@ -30,10 +32,10 @@ public class RoomService {
         this.propertyRepository = propertyRepository;
     }
 
+    // CREATE ROOM
     @Transactional
     public RoomResponse createRoom(CreateRoomRequest request) {
 
-        // Validate request
         if (request == null
                 || request.propertyId() == null
                 || request.code() == null
@@ -51,7 +53,6 @@ public class RoomService {
             );
         }
 
-        // Check property exists
         Property property = propertyRepository
                 .findById(request.propertyId())
                 .orElseThrow(() ->
@@ -63,7 +64,6 @@ public class RoomService {
 
         String roomCode = request.code().trim();
 
-        // Check duplicate room code
         if (roomRepository.existsByProperty_IdAndCode(
                 property.getId(), roomCode)) {
 
@@ -73,7 +73,6 @@ public class RoomService {
             );
         }
 
-        // Create room
         Room room = new Room();
 
         room.setProperty(property);
@@ -87,36 +86,15 @@ public class RoomService {
         room.setStatus(RoomStatus.AVAILABLE);
         room.setPublished(false);
 
-        // Save into MySQL
         Room savedRoom = roomRepository.saveAndFlush(room);
 
         return toResponse(savedRoom);
     }
 
-    private RoomResponse toResponse(Room room) {
-
-        return new RoomResponse(
-                room.getId(),
-                room.getProperty().getId(),
-                room.getCode(),
-                room.getTitle(),
-                room.getDescription(),
-                room.getFloorNumber(),
-                room.getAreaM2(),
-                room.getMonthlyRent(),
-                room.getStatus(),
-                room.getPublished(),
-                room.getCreatedAt(),
-                room.getUpdatedAt()
-        );
-
-
-    }
-
+    // GET ROOMS BY PROPERTY ID
     @Transactional(readOnly = true)
-    public List<RoomResponse> getRoomsByPropertyId(
-            UUID propertyId
-    ) {
+    public List<RoomResponse> getRoomsByPropertyId(UUID propertyId) {
+
         if (propertyId == null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -138,6 +116,7 @@ public class RoomService {
                 .toList();
     }
 
+    // GET ROOM BY ID
     @Transactional(readOnly = true)
     public RoomResponse getRoomById(UUID id) {
 
@@ -152,12 +131,13 @@ public class RoomService {
         return toResponse(room);
     }
 
+    // UPDATE ROOM
     @Transactional
     public RoomResponse updateRoom(
             UUID id,
             UpdateRoomRequest request
     ) {
-        // 1. Find existing room
+
         Room room = roomRepository.findById(id)
                 .orElseThrow(() ->
                         new ResponseStatusException(
@@ -166,7 +146,6 @@ public class RoomService {
                         )
                 );
 
-        // 2. Validate request
         if (request == null
                 || request.code() == null
                 || request.code().isBlank()
@@ -190,7 +169,6 @@ public class RoomService {
 
         String newCode = request.code().trim();
 
-        // 3. Check duplicate code if changed
         if (!room.getCode().equals(newCode)
                 && roomRepository.existsByProperty_IdAndCode(
                 room.getProperty().getId(),
@@ -203,7 +181,6 @@ public class RoomService {
             );
         }
 
-        // 4. Update editable fields
         room.setCode(newCode);
         room.setTitle(request.title().trim());
         room.setDescription(request.description());
@@ -217,6 +194,110 @@ public class RoomService {
         return toResponse(updatedRoom);
     }
 
+    // PUBLISH OR UNPUBLISH ROOM
+    @Transactional
+    public RoomResponse setRoomPublished(
+            UUID id,
+            boolean published
+    ) {
 
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Room not found"
+                        )
+                );
+
+        if (published
+                && room.getStatus() != RoomStatus.AVAILABLE) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Only available rooms can be published"
+            );
+        }
+
+        room.setPublished(published);
+
+        Room savedRoom = roomRepository.saveAndFlush(room);
+
+        return toResponse(savedRoom);
+    }
+
+    // GET PUBLIC ROOMS
+    @Transactional(readOnly = true)
+    public List<PublicRoomResponse> getPublicRooms() {
+
+        return roomRepository
+                .findByPublishedTrueAndStatusOrderByCodeAsc(
+                        RoomStatus.AVAILABLE
+                )
+                .stream()
+                .map(this::toPublicResponse)
+                .toList();
+    }
+
+    // CONVERT ENTITY TO ADMIN RESPONSE
+    private RoomResponse toResponse(Room room) {
+
+        return new RoomResponse(
+                room.getId(),
+                room.getProperty().getId(),
+                room.getCode(),
+                room.getTitle(),
+                room.getDescription(),
+                room.getFloorNumber(),
+                room.getAreaM2(),
+                room.getMonthlyRent(),
+                room.getStatus(),
+                room.getPublished(),
+                room.getCreatedAt(),
+                room.getUpdatedAt()
+        );
+    }
+
+    // CONVERT ENTITY TO PUBLIC RESPONSE
+    private PublicRoomResponse toPublicResponse(Room room) {
+
+        Property property = room.getProperty();
+
+        return new PublicRoomResponse(
+                room.getId(),
+                property.getId(),
+                property.getName(),
+                room.getCode(),
+                room.getTitle(),
+                room.getDescription(),
+                room.getFloorNumber(),
+                room.getAreaM2(),
+                room.getMonthlyRent(),
+                property.getContactPhone()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public PublicRoomResponse getPublicRoomById(UUID id) {
+
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Room not found"
+                        )
+                );
+
+        // Hidden or unavailable rooms are not visible to guests
+        if (!Boolean.TRUE.equals(room.getPublished())
+                || room.getStatus() != RoomStatus.AVAILABLE) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Room not found"
+            );
+        }
+
+        return toPublicResponse(room);
+    }
 
 }
