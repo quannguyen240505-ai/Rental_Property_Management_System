@@ -1,0 +1,2930 @@
+{
+  "info": {
+    "_postman_id": "179ab5b7-4011-4dd2-8729-0d6b38e9fb0a",
+    "name": "Rental Property - Auth Service | Automated API Regression",
+    "description": "57 ordered API test cases grounded in feature/auth-service. Run against an isolated local MySQL auth_db through http://localhost:8081. Must run in the listed order. Creates unique CUSTOMER and STAFF per run; never changes or locks OWNER. See README for configuration and limitations.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "58441890",
+    "_collection_link": "https://go.postman.co/collection/58441890-179ab5b7-4011-4dd2-8729-0d6b38e9fb0a?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "01 - Setup and unauthenticated access",
+      "item": [
+        {
+          "name": "TC_AUTH_001 | Health check",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);",
+                  "const vars = {",
+                  "  runId: id,",
+                  "  customerUsername: 'qa_customer_' + id,",
+                  "  customerEmail: 'qa_customer_' + id + '@example.com',",
+                  "  staffUsername: 'qa_staff_' + id,",
+                  "  staffEmail: 'qa_staff_' + id + '@example.com',",
+                  "  customerUpdatedName: 'Updated QA Customer',",
+                  "  staffUpdatedName: 'Updated QA Staff',",
+                  "  staffUpdatedPhone: '0987654321'",
+                  "};",
+                  "Object.entries(vars).forEach(([key, value]) => pm.environment.set(key, value));",
+                  "['customerToken','staffToken','ownerToken','customerId','staffId','ownerId','promotedToken','postChangeToken']",
+                  "  .forEach(key => pm.environment.unset(key));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Application is UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });",
+                  "pm.test('Run ID generated', function () { pm.expect(pm.environment.get('runId')).to.be.a('string').and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Start of every collection run: creates unique test usernames, clears old runtime tokens, checks application health. If run separately, this resets current test data variables."
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_002 | No JWT cannot read /users/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_002 | No JWT cannot read /users/me"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_003 | Invalid JWT rejected",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('invalidToken','not-a-real-jwt');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{invalidToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_003 | Invalid JWT rejected"
+          },
+          "response": []
+        }
+      ],
+      "description": "Run first. Auth Service must already be running on port 8081."
+    },
+    {
+      "name": "02 - CUSTOMER: register, login and profile",
+      "item": [
+        {
+          "name": "TC_AUTH_004 | Register CUSTOMER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test('New account is CUSTOMER / ACTIVE', function () {",
+                  "    pm.expect(data.id).to.be.a('string');",
+                  "    pm.expect(data.username).to.eql(pm.environment.get('customerUsername'));",
+                  "    pm.expect(data.role).to.eql('CUSTOMER');",
+                  "    pm.expect(data.status).to.eql('ACTIVE');",
+                  "    pm.expect(data).not.to.have.property('passwordHash');",
+                  "});",
+                  "if (pm.response.code === 201 && data.id) pm.environment.set('customerId', data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"fullName\": \"QA Customer\",\n  \"email\": \"{{customerEmail}}\",\n  \"phone\": \"0901234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "TC_AUTH_004 | Register CUSTOMER"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_005 | Duplicate username/email => 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('code = CONFLICT', function () { pm.expect(pm.response.json().code).to.eql(\"CONFLICT\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"fullName\": \"QA Customer\",\n  \"email\": \"{{customerEmail}}\",\n  \"phone\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "TC_AUTH_005 | Duplicate username/email => 409"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_006 | Invalid username => 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = VALIDATION_ERROR', function () { pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"ab\",\n  \"password\": \"{{customerPassword}}\",\n  \"fullName\": \"QA Customer\",\n  \"email\": \"invalid-user-{{runId}}@example.com\",\n  \"phone\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "TC_AUTH_006 | Invalid username => 400"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_007 | Weak password => 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = WEAK_PASSWORD', function () { pm.expect(pm.response.json().code).to.eql(\"WEAK_PASSWORD\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"badpw_{{runId}}\",\n  \"password\": \"abc123\",\n  \"fullName\": \"QA Customer\",\n  \"email\": \"badpw-{{runId}}@example.com\",\n  \"phone\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "TC_AUTH_007 | Weak password => 400"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_008 | Invalid email => 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = VALIDATION_ERROR', function () { pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"bademail_{{runId}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"fullName\": \"QA Customer\",\n  \"email\": \"not-an-email\",\n  \"phone\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "TC_AUTH_008 | Invalid email => 400"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_009 | Wrong CUSTOMER password => 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('code = INVALID_CREDENTIALS', function () { pm.expect(pm.response.json().code).to.eql(\"INVALID_CREDENTIALS\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"WRONG_PASS_123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_009 | Wrong CUSTOMER password => 401"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_010 | CUSTOMER login -> JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('JWT response contains expected fields', function () {",
+                  "   pm.expect(data.accessToken).to.be.a('string').and.not.empty;",
+                  "   pm.expect(data.tokenType).to.eql('Bearer');",
+                  "   pm.expect(data.role).to.eql('CUSTOMER');",
+                  "   pm.expect(data.userId).to.eql(pm.environment.get('customerId'));",
+                  "   pm.expect(Date.parse(data.expiresAt)).to.be.above(Date.now());",
+                  "});",
+                  "if (pm.response.code === 200 && data.accessToken) pm.environment.set('customerToken',data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_010 | CUSTOMER login -> JWT"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_011 | CUSTOMER reads own profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Profile belongs to logged-in CUSTOMER', function () {",
+                  "  const u=pm.response.json();",
+                  "  pm.expect(u.id).to.eql(pm.environment.get('customerId'));",
+                  "  pm.expect(u.username).to.eql(pm.environment.get('customerUsername'));",
+                  "  pm.expect(u.role).to.eql('CUSTOMER');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_011 | CUSTOMER reads own profile"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_012 | CUSTOMER edits own profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Profile updated', function () {",
+                  "  const u=pm.response.json();",
+                  "  pm.expect(u.fullName).to.eql(pm.environment.get('customerUpdatedName'));",
+                  "  pm.expect(u.phone).to.eql('0909876543');",
+                  "  pm.expect(u.id).to.eql(pm.environment.get('customerId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"{{customerUpdatedName}}\",\n  \"phone\": \"0909876543\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_012 | CUSTOMER edits own profile"
+          },
+          "response": []
+        }
+      ],
+      "description": "Test account is created with a different username every run."
+    },
+    {
+      "name": "03 - OWNER: user management CRUD",
+      "item": [
+        {
+          "name": "TC_AUTH_013 | OWNER login -> JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('OWNER login response',function(){",
+                  "   pm.expect(pm.environment.get('ownerPassword'),'Set ownerPassword in Postman Environment').to.be.a('string').and.not.empty;",
+                  "   pm.expect(data.role).to.eql('OWNER');",
+                  "   pm.expect(data.accessToken).to.be.a('string').and.not.empty;",
+                  "   pm.expect(data.userId).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if(pm.response.code===200 && data.accessToken){",
+                  "   pm.environment.set('ownerToken',data.accessToken);",
+                  "   pm.environment.set('ownerId',data.userId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{ownerUsername}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Set ownerUsername and ownerPassword to the account already seeded in auth_db. Never publish the password."
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_014 | OWNER reads own profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('role = OWNER', function () { pm.expect(pm.response.json().role).to.eql(\"OWNER\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_014 | OWNER reads own profile"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_015 | OWNER lists users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('List contains CUSTOMER created in run',function(){",
+                  "  const arr=pm.response.json();",
+                  "  pm.expect(arr).to.be.an('array');",
+                  "  pm.expect(arr.some(u=>u.id===pm.environment.get('customerId'))).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_015 | OWNER lists users"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_016 | OWNER filters CUSTOMER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Every listed record has CUSTOMER role', function(){",
+                  "  const arr=pm.response.json();",
+                  "  pm.expect(arr).to.be.an('array');",
+                  "  pm.expect(arr.some(u=>u.id===pm.environment.get('customerId'))).to.be.true;",
+                  "  pm.expect(arr.every(u=>u.role==='CUSTOMER')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?role=CUSTOMER",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "CUSTOMER"
+                }
+              ]
+            },
+            "description": "TC_AUTH_016 | OWNER filters CUSTOMER"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_017 | OWNER views CUSTOMER by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Correct CUSTOMER returned',function(){",
+                  "  const u=pm.response.json();",
+                  "  pm.expect(u.id).to.eql(pm.environment.get('customerId'));",
+                  "  pm.expect(u.role).to.eql('CUSTOMER');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}"
+              ]
+            },
+            "description": "TC_AUTH_017 | OWNER views CUSTOMER by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_018 | OWNER creates STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "const data=pm.response.json();",
+                  "pm.test('STAFF created ACTIVE', function(){",
+                  "  pm.expect(data.id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(data.role).to.eql('STAFF');",
+                  "  pm.expect(data.status).to.eql('ACTIVE');",
+                  "  pm.expect(data.username).to.eql(pm.environment.get('staffUsername'));",
+                  "});",
+                  "if(pm.response.code===201 && data.id)pm.environment.set('staffId',data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\",\n  \"fullName\": \"QA Staff\",\n  \"email\": \"{{staffEmail}}\",\n  \"phone\": \"0901112222\",\n  \"role\": \"STAFF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_018 | OWNER creates STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_019 | OWNER lists STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('STAFF list includes created account',function(){",
+                  "  const arr=pm.response.json();",
+                  "  pm.expect(arr).to.be.an('array');",
+                  "  pm.expect(arr.some(u=>u.id===pm.environment.get('staffId')&&u.role==='STAFF')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/staff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "staff"
+              ]
+            },
+            "description": "TC_AUTH_019 | OWNER lists STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_020 | OWNER updates STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('STAFF fields updated',function(){",
+                  "  const u=pm.response.json();",
+                  "  pm.expect(u.id).to.eql(pm.environment.get('staffId'));",
+                  "  pm.expect(u.fullName).to.eql(pm.environment.get('staffUpdatedName'));",
+                  "  pm.expect(u.phone).to.eql(pm.environment.get('staffUpdatedPhone'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"{{staffUpdatedName}}\",\n  \"email\": \"{{staffEmail}}\",\n  \"phone\": \"{{staffUpdatedPhone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{staffId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{staffId}}"
+              ]
+            },
+            "description": "TC_AUTH_020 | OWNER updates STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_021 | OWNER views updated STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Database returned updated STAFF',function(){",
+                  "  const u=pm.response.json();",
+                  "  pm.expect(u.id).to.eql(pm.environment.get('staffId'));",
+                  "  pm.expect(u.fullName).to.eql(pm.environment.get('staffUpdatedName'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{staffId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{staffId}}"
+              ]
+            },
+            "description": "TC_AUTH_021 | OWNER views updated STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_022 | Cannot create TENANT directly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = BAD_REQUEST', function () { pm.expect(pm.response.json().code).to.eql(\"BAD_REQUEST\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"tenant_blocked_{{runId}}\",\n  \"password\": \"{{staffPassword}}\",\n  \"fullName\": \"Tenant Blocked\",\n  \"email\": \"tenant-blocked-{{runId}}@example.com\",\n  \"phone\": null,\n  \"role\": \"TENANT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_022 | Cannot create TENANT directly"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_023 | Cannot create OWNER directly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = BAD_REQUEST', function () { pm.expect(pm.response.json().code).to.eql(\"BAD_REQUEST\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"owner_blocked_{{runId}}\",\n  \"password\": \"{{staffPassword}}\",\n  \"fullName\": \"Owner Blocked\",\n  \"email\": \"owner-blocked-{{runId}}@example.com\",\n  \"phone\": null,\n  \"role\": \"OWNER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_023 | Cannot create OWNER directly"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_024 | OWNER cannot lock OWNER account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = BAD_REQUEST', function () { pm.expect(pm.response.json().code).to.eql(\"BAD_REQUEST\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"LOCKED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{ownerId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{ownerId}}",
+                "status"
+              ]
+            },
+            "description": "TC_AUTH_024 | OWNER cannot lock OWNER account"
+          },
+          "response": []
+        }
+      ],
+      "description": "Covers read/create/update/soft lock; there is intentionally no hard-delete API. Does not mutate the OWNER account."
+    },
+    {
+      "name": "04 - RBAC and unauthorised operations",
+      "item": [
+        {
+          "name": "TC_AUTH_025 | CUSTOMER cannot list users (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_025 | CUSTOMER cannot list users (403)"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_026 | CUSTOMER cannot create STAFF (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"no_priv_{{runId}}\",\n  \"password\": \"{{staffPassword}}\",\n  \"fullName\": \"Forbidden\",\n  \"email\": \"forbidden-{{runId}}@example.com\",\n  \"phone\": null,\n  \"role\": \"STAFF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_026 | CUSTOMER cannot create STAFF (403)"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_027 | Guest cannot list users (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_027 | Guest cannot list users (401)"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_028 | STAFF login -> JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('STAFF login succeeds',()=>{pm.expect(data.role).to.eql('STAFF');pm.expect(data.accessToken).to.be.a('string').and.not.empty;});",
+                  "if(pm.response.code===200&&data.accessToken)pm.environment.set('staffToken',data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_028 | STAFF login -> JWT"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_029 | STAFF cannot list users (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "TC_AUTH_029 | STAFF cannot list users (403)"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_030 | STAFF can view own profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('STAFF profile',function(){pm.expect(pm.response.json().id).to.eql(pm.environment.get('staffId'));});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_030 | STAFF can view own profile"
+          },
+          "response": []
+        }
+      ],
+      "description": "HTTP 401 without valid token and 403 with valid token but insufficient role."
+    },
+    {
+      "name": "05 - OWNER: role management",
+      "item": [
+        {
+          "name": "TC_AUTH_031 | OWNER promotes CUSTOMER to STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('role = STAFF', function () { pm.expect(pm.response.json().role).to.eql(\"STAFF\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"STAFF\",\n  \"reason\": \"Appointed as QA staff for test\",\n  \"contractReference\": null,\n  \"contractStatusConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}",
+                "role"
+              ]
+            },
+            "description": "TC_AUTH_031 | OWNER promotes CUSTOMER to STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_032 | Previous CUSTOMER JWT revoked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_032 | Previous CUSTOMER JWT revoked"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_033 | Promoted user logs in with STAFF role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('Promoted account has STAFF authority',()=>pm.expect(data.role).to.eql('STAFF'));",
+                  "if(pm.response.code===200&&data.accessToken)pm.environment.set('promotedToken',data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_033 | Promoted user logs in with STAFF role"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_034 | OWNER reads user role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Role endpoint responds with a JSON string STAFF',()=>pm.expect(pm.response.json()).to.eql('STAFF'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}",
+                "role"
+              ]
+            },
+            "description": "TC_AUTH_034 | OWNER reads user role"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_035 | OWNER demotes STAFF to CUSTOMER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('role = CUSTOMER', function () { pm.expect(pm.response.json().role).to.eql(\"CUSTOMER\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CUSTOMER\",\n  \"reason\": \"Staff assignment ended\",\n  \"contractReference\": null,\n  \"contractStatusConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}",
+                "role"
+              ]
+            },
+            "description": "TC_AUTH_035 | OWNER demotes STAFF to CUSTOMER"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_036 | Promoted JWT revoked after demotion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{promotedToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_036 | Promoted JWT revoked after demotion"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_037 | OWNER sees role change history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Two role transitions recorded in order',function(){",
+                  "  const arr=pm.response.json();",
+                  "  pm.expect(arr).to.be.an('array').with.lengthOf(2);",
+                  "  pm.expect(arr[0].previousRole).to.eql('STAFF');",
+                  "  pm.expect(arr[0].newRole).to.eql('CUSTOMER');",
+                  "  pm.expect(arr[1].previousRole).to.eql('CUSTOMER');",
+                  "  pm.expect(arr[1].newRole).to.eql('STAFF');",
+                  "  pm.expect(arr.every(x=>x.actorUserId===pm.environment.get('ownerId'))).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}/role-history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}",
+                "role-history"
+              ]
+            },
+            "description": "TC_AUTH_037 | OWNER sees role change history"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_038 | Cannot assign OWNER role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = INVALID_ROLE_TRANSITION', function () { pm.expect(pm.response.json().code).to.eql(\"INVALID_ROLE_TRANSITION\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"OWNER\",\n  \"reason\": \"Attempt to gain higher privileges\",\n  \"contractReference\": null,\n  \"contractStatusConfirmed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}",
+                "role"
+              ]
+            },
+            "description": "TC_AUTH_038 | Cannot assign OWNER role"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_039 | TENANT requires Rental integration",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('code = RENTAL_INTEGRATION_REQUIRED', function () { pm.expect(pm.response.json().code).to.eql(\"RENTAL_INTEGRATION_REQUIRED\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"TENANT\",\n  \"reason\": \"Testing Rental prerequisite\",\n  \"contractReference\": \"RENTAL-TEST-001\",\n  \"contractStatusConfirmed\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}",
+                "role"
+              ]
+            },
+            "description": "TC_AUTH_039 | TENANT requires Rental integration"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_040 | Role remains CUSTOMER after rejected changes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('role = CUSTOMER', function () { pm.expect(pm.response.json().role).to.eql(\"CUSTOMER\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{customerId}}"
+              ]
+            },
+            "description": "TC_AUTH_040 | Role remains CUSTOMER after rejected changes"
+          },
+          "response": []
+        }
+      ],
+      "description": "CUSTOMER ↔ STAFF works. CUSTOMER → TENANT is expected to return 409 until Rental Service verifies the contract."
+    },
+    {
+      "name": "06 - OWNER: account status",
+      "item": [
+        {
+          "name": "TC_AUTH_041 | OWNER locks STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('status = LOCKED', function () { pm.expect(pm.response.json().status).to.eql(\"LOCKED\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"LOCKED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{staffId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{staffId}}",
+                "status"
+              ]
+            },
+            "description": "TC_AUTH_041 | OWNER locks STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_042 | Locked STAFF old JWT revoked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_042 | Locked STAFF old JWT revoked"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_043 | Locked STAFF login rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('code = INVALID_CREDENTIALS', function () { pm.expect(pm.response.json().code).to.eql(\"INVALID_CREDENTIALS\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_043 | Locked STAFF login rejected"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_044 | OWNER unlocks STAFF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('status = ACTIVE', function () { pm.expect(pm.response.json().status).to.eql(\"ACTIVE\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{staffId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{staffId}}",
+                "status"
+              ]
+            },
+            "description": "TC_AUTH_044 | OWNER unlocks STAFF"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_045 | STAFF logs in after unlock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('Unlocked STAFF login succeeds',()=>pm.expect(data.role).to.eql('STAFF'));",
+                  "if(pm.response.code===200&&data.accessToken)pm.environment.set('staffToken',data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_045 | STAFF logs in after unlock"
+          },
+          "response": []
+        }
+      ],
+      "description": "A locked user must lose access immediately on Auth Service; unlock allows a new JWT."
+    },
+    {
+      "name": "07 - Password change and logout",
+      "item": [
+        {
+          "name": "TC_AUTH_046 | CUSTOMER login after demotion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('CUSTOMER role restored',()=>pm.expect(data.role).to.eql('CUSTOMER'));",
+                  "if(pm.response.code===200&&data.accessToken)pm.environment.set('customerToken',data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_046 | CUSTOMER login after demotion"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_047 | Wrong current password rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = INVALID_PASSWORD', function () { pm.expect(pm.response.json().code).to.eql(\"INVALID_PASSWORD\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"WrongCurrent123\",\n  \"newPassword\": \"{{customerNewPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "TC_AUTH_047 | Wrong current password rejected"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_048 | Reusing same password rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = PASSWORD_REUSED', function () { pm.expect(pm.response.json().code).to.eql(\"PASSWORD_REUSED\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{customerPassword}}\",\n  \"newPassword\": \"{{customerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "TC_AUTH_048 | Reusing same password rejected"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_049 | CUSTOMER changes password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Password change confirms re-login',()=>pm.expect(pm.response.json().message).to.match(/sign in again/i));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{customerPassword}}\",\n  \"newPassword\": \"{{customerNewPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "TC_AUTH_049 | CUSTOMER changes password"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_050 | Previous JWT revoked on password change",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_050 | Previous JWT revoked on password change"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_051 | Previous password cannot login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('code = INVALID_CREDENTIALS', function () { pm.expect(pm.response.json().code).to.eql(\"INVALID_CREDENTIALS\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_051 | Previous password cannot login"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_052 | New password logs in",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const data=pm.response.json();",
+                  "pm.test('New password login succeeds',()=>{pm.expect(data.role).to.eql('CUSTOMER');pm.expect(data.accessToken).to.be.a('string').and.not.empty;});",
+                  "if(pm.response.code===200&&data.accessToken)pm.environment.set('postChangeToken',data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerNewPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "TC_AUTH_052 | New password logs in"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_053 | Logout invalidates all Auth JWTs for user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Logout returns confirmation',()=>pm.expect(pm.response.json().message).to.include('invalidated'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{postChangeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "TC_AUTH_053 | Logout invalidates all Auth JWTs for user"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_054 | Logged-out JWT rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{postChangeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "TC_AUTH_054 | Logged-out JWT rejected"
+          },
+          "response": []
+        }
+      ],
+      "description": "Password rotation and token revocation are checked only at Auth Service."
+    },
+    {
+      "name": "08 - Forgot/reset negative cases (automatic)",
+      "item": [
+        {
+          "name": "TC_AUTH_055 | Forgot unknown email gives generic response",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', function () { pm.response.to.have.status(202); });",
+                  "pm.test('No account enumeration',()=>pm.expect(pm.response.json().message).to.include('If the account exists'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"unknown-{{runId}}@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "TC_AUTH_055 | Forgot unknown email gives generic response"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_056 | Invalid forgot email rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = VALIDATION_ERROR', function () { pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"not-an-email\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "TC_AUTH_056 | Invalid forgot email rejected"
+          },
+          "response": []
+        },
+        {
+          "name": "TC_AUTH_057 | Invalid reset token rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code = INVALID_RESET_TOKEN', function () { pm.expect(pm.response.json().code).to.eql(\"INVALID_RESET_TOKEN\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"not-a-valid-password-reset-token\",\n  \"newPassword\": \"{{customerNewPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "TC_AUTH_057 | Invalid reset token rejected"
+          },
+          "response": []
+        }
+      ],
+      "description": "Does not send real emails. Valid reset through SMTP is tested separately in the manual collection."
+    }
+  ]
+}
