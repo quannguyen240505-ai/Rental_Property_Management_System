@@ -1,0 +1,67 @@
+server:
+  port: ${NOTIFICATION_PORT:8086}
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3306/notification_db?useSSL=false&serverTimezone=UTC}
+    username: ${NOTIFICATION_DB_USERNAME}
+    password: ${NOTIFICATION_DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      # For local development only; use versioned migrations before production.
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER}
+    password: ${RABBIT_PASSWORD}
+    listener:
+      simple:
+        auto-startup: ${NOTIFICATION_RABBIT_ENABLED:true}
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        prefetch: 10
+        retry:
+          enabled: true
+          max-retries: 2
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 5s
+
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+app:
+  auth:
+    # Backchannel only: never send the service key to Angular or through Gateway.
+    base-url: ${AUTH_INTERNAL_BASE_URL:http://localhost:8081}
+    internal-service-key: ${AUTH_INTERNAL_SERVICE_KEY}
+
+  notification:
+    rabbit:
+      exchange: rental.events.v1
+      routing-key: notification.created.v1
+      queue: rental.notifications.v1
+      dlx: rental.notifications.dlx.v1
+      dead-routing-key: notification.dead.v1
+      dead-queue: rental.notifications.dead.v1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
