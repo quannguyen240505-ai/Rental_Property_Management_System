@@ -3539,6 +3539,472 @@
       "description": "Run after Auth groups 01-04 and before Auth 05-08. Uses ownerToken, staffToken, customerToken from the unchanged Auth testcase chain. The first property create request generates unique QA fixture IDs. Property auth must be configured with the same AUTH_INTERNAL_SERVICE_KEY as Auth."
     },
     {
+      "name": "STAFF scope - OWNER assignment + RBAC",
+      "item": [
+        {
+          "name": "TC_SCOPE_001 | OWNER assigns STAFF to property (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"Mapping matches property and STAFF\",()=>{const j=pm.response.json(); pm.expect(j.propertyId).to.eql(pm.environment.get(\"propertyId\"));pm.expect(j.staffId).to.eql(pm.environment.get(\"staffId\"));});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}/staff/{{staffId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "staff",
+                "{{staffId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_002 | OWNER lists STAFF assignments (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(200));",
+                  "",
+                  "pm.test(\"Assigned STAFF is present\",()=>{pm.expect(pm.response.json()).to.include(pm.environment.get(\"staffId\"));});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}/staff",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "staff"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_003 | Assigned STAFF views property (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(200));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_004 | Assigned STAFF lists property rooms (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(200));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/rooms?propertyId={{propertyId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rooms"
+              ],
+              "query": [
+                {
+                  "key": "propertyId",
+                  "value": "{{propertyId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_005 | STAFF cannot publish room (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(403));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"published\": true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rooms",
+                "{{roomId}}",
+                "publication"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_006 | STAFF cannot create a new property (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(403));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Scope denied QA\", \"address\": \"QA address\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_007 | OWNER revokes STAFF assignment (204)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(204));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}/staff/{{staffId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "staff",
+                "{{staffId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_008 | Revoked STAFF cannot view property (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(403));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TC_SCOPE_009 | OWNER can still view property (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=['propertyBaseUrl','propertyId','staffId','ownerToken','staffToken'];",
+                  "for (const k of keys) {if (!pm.environment.get(k)) throw new Error('Missing environment variable: '+k+'; run Auth setup first');}",
+                  ""
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP EXPECTED', ()=>pm.response.to.have.status(200));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "05 - OWNER: role management",
       "item": [
         {

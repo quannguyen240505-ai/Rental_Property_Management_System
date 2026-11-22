@@ -7,15 +7,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-
 import java.time.Instant;
 import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PropertyApiSecurityInterceptorTest {
-
     private AuthIntrospectionClient authClient;
     private PropertyApiSecurityInterceptor interceptor;
     private HttpServletRequest request;
@@ -30,30 +27,37 @@ class PropertyApiSecurityInterceptorTest {
         when(request.getMethod()).thenReturn("GET");
     }
 
-    @Test
-    void ownerWithValidToken_canAccess() {
-        UUID ownerId = UUID.randomUUID();
-        when(request.getHeader("Authorization")).thenReturn("Bearer good.jwt.value");
-        when(authClient.introspectBearerToken("Bearer good.jwt.value"))
-                .thenReturn(new TokenIntrospectionResponse(
-                        true, ownerId, "owner", "OWNER", Instant.now().plusSeconds(600)));
-        assertTrue(interceptor.preHandle(request, response, new Object()));
-        verify(request).setAttribute("authenticatedUserId", ownerId);
+    private void mockIdentity(String token, String role, UUID id) {
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
+        when(authClient.introspectBearerToken("Bearer " + token))
+                .thenReturn(new TokenIntrospectionResponse(true, id,
+                        role.toLowerCase(), role, Instant.now().plusSeconds(600)));
     }
 
-    @Test
-    void staffWithoutAssignmentPolicy_gets403() {
-        when(request.getHeader("Authorization")).thenReturn("Bearer staff.jwt.value");
-        when(authClient.introspectBearerToken("Bearer staff.jwt.value"))
-                .thenReturn(new TokenIntrospectionResponse(
-                        true, UUID.randomUUID(), "staff", "STAFF", Instant.now().plusSeconds(600)));
+    @Test void ownerWithValidToken_canAccess() {
+        UUID id = UUID.randomUUID();
+        mockIdentity("owner.jwt.value", "OWNER", id);
+        assertTrue(interceptor.preHandle(request, response, new Object()));
+        verify(request).setAttribute("authenticatedUserId", id);
+        verify(request).setAttribute("authenticatedRole", "OWNER");
+    }
+
+    @Test void staffWithValidToken_canProceedToPropertyScopeCheck() {
+        UUID id = UUID.randomUUID();
+        mockIdentity("staff.jwt.value", "STAFF", id);
+        assertTrue(interceptor.preHandle(request, response, new Object()));
+        verify(request).setAttribute("authenticatedUserId", id);
+        verify(request).setAttribute("authenticatedRole", "STAFF");
+    }
+
+    @Test void customerIsForbidden() {
+        mockIdentity("customer.jwt.value", "CUSTOMER", UUID.randomUUID());
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> interceptor.preHandle(request, response, new Object()));
-        assertEquals(HttpStatus.FORBIDDEN.value(), ex.getStatusCode().value());
+        assertEquals(403, ex.getStatusCode().value());
     }
 
-    @Test
-    void invalidToken_gets401() {
+    @Test void invalidToken_gets401() {
         when(authClient.introspectBearerToken(null))
                 .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -61,8 +65,7 @@ class PropertyApiSecurityInterceptorTest {
         assertEquals(401, ex.getStatusCode().value());
     }
 
-    @Test
-    void authUnavailable_gets503() {
+    @Test void authUnavailable_gets503() {
         when(authClient.introspectBearerToken(null))
                 .thenThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE));
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -70,8 +73,7 @@ class PropertyApiSecurityInterceptorTest {
         assertEquals(503, ex.getStatusCode().value());
     }
 
-    @Test
-    void optionsPreflight_passesWithoutIntrospection() {
+    @Test void optionsPreflight_passesWithoutIntrospection() {
         when(request.getMethod()).thenReturn("OPTIONS");
         assertTrue(interceptor.preHandle(request, response, new Object()));
         verifyNoInteractions(authClient);

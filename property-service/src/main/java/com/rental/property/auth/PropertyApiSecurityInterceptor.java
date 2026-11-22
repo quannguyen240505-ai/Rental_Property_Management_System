@@ -8,14 +8,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-/**
- * Interim policy: OWNER-only management endpoints.
- * STAFF is denied until property-assignment checks are implemented.
- * The public /api/public/** routes are deliberately not intercepted.
- */
+/** JWT is always verified by Auth; OWNER/STAFF data scope is checked in controllers. */
 @Component
 public class PropertyApiSecurityInterceptor implements HandlerInterceptor {
-
     private final AuthIntrospectionClient authClient;
 
     public PropertyApiSecurityInterceptor(AuthIntrospectionClient authClient) {
@@ -23,24 +18,14 @@ public class PropertyApiSecurityInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request,
-                             HttpServletResponse response,
-                             Object handler) {
-        // CORS preflight is not an actual business request.
-        // A matching CORS policy at Gateway / Property is still required for browsers.
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            return true;
-        }
-
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) return true;
         TokenIntrospectionResponse user = authClient.introspectBearerToken(
                 request.getHeader("Authorization"));
-
-        if (!"OWNER".equals(user.role())) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "This operation currently requires the OWNER role");
+        if (!"OWNER".equals(user.role()) && !"STAFF".equals(user.role())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only OWNER or STAFF can access management APIs");
         }
-
         request.setAttribute("authenticatedUserId", user.userId());
         request.setAttribute("authenticatedRole", user.role());
         return true;
