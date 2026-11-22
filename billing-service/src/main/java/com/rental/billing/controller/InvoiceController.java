@@ -50,5 +50,5 @@ public class InvoiceController {
             Authentication authentication) {
 
         return service.issue(id, authentication);
-    }	
+    }
 }

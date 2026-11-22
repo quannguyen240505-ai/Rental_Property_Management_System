@@ -4,8 +4,8 @@ Quản lý chỉ số điện nước, tạo hóa đơn nháp và phát hành h�
 
 ## Cấu hình chạy
 
-- Java 25, Maven và MySQL 8.
-- Schema phải có sẵn các bảng vì Hibernate dùng ddl-auto=validate.
+- Java 25, Maven và MySQL 8.0.16 trở lên.
+- Flyway tạo bảng trên database mới trước khi Hibernate kiểm tra schema với ddl-auto=validate.
 - Cổng mặc định: 8084. Bộ kiểm thử local dùng BILLING_PORT=8087.
 
 Các biến môi trường:
@@ -72,3 +72,36 @@ Các tình huống cần kiểm tra:
 - Token đã logout bị từ chối với 401.
 - STAFF/CUSTOMER bị từ chối với 403 ở chức năng chỉ dành cho OWNER.
 - Auth không khả dụng trả 503 và không thực hiện ghi dữ liệu nghiệp vụ.
+
+## Database và Flyway
+
+### Database mới
+
+1. Tạo database MySQL rỗng, ví dụ:
+
+       CREATE DATABASE rental_billing_db
+       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+2. Cấu hình MYSQL_USER, MYSQL_PASSWORD và SPRING_DATASOURCE_URL nếu cần.
+3. Khởi động Billing Service.
+4. Flyway chạy V1__create_billing_tables.sql để tạo bảng.
+5. Hibernate kiểm tra cấu trúc bằng ddl-auto=validate.
+6. Khởi động lại: Flyway xác nhận schema đã cập nhật, không chạy lại V1.
+
+Không import database/billing_schema.sql hoặc review_fixes_migration.sql
+trước khi chạy Flyway trên database mới.
+
+### Database đã có dữ liệu
+
+- Sao lưu và đối chiếu schema với V1 trước khi lập kế hoạch baseline.
+- Giữ baseline-on-migrate=false trong cấu hình chung.
+- Chỉ baseline phiên bản 1 sau khi xác nhận schema tương ứng V1.
+- Quy trình baseline database cũ chưa được kiểm thử trong thay đổi này.
+- Không tự sửa bảng flyway_schema_history.
+
+### Quy tắc migration
+
+- Không sửa V1 sau khi đã áp dụng.
+- Thay đổi tiếp theo dùng V2, V3... theo thứ tự.
+- Giữ clean-disabled=true và validate-on-migrate=true.
+- Dùng database rỗng riêng để kiểm thử migration.
