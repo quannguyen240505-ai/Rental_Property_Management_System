@@ -17,7 +17,8 @@ public class PropertyApiSecurityConfig implements WebMvcConfigurer {
         registry.addInterceptor(securityInterceptor).addPathPatterns(
                 "/api/properties", "/api/properties/**",
                 "/api/rooms", "/api/rooms/**",
-                "/api/viewings", "/api/viewings/**"
+                "/api/viewings", "/api/viewings/**",
+                "/api/room-holds", "/api/room-holds/**"
         );
         // The public catalog /api/public/** remains open to guests.
     }
