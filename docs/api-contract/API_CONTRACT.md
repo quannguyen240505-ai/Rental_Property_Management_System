@@ -1,11 +1,12 @@
 # API CONTRACT — TOÀN NHÓM
 
 **Dự án:** Rental Property Management System — SOA  
-**Trạng thái:** Tài liệu thống nhất API toàn nhóm (bản dự thảo tích hợp, cập nhật 05/11/2026)  
-**Base URL:** `http://localhost:8080` qua API Gateway  
-**Quy ước:** Các endpoint bắt đầu bằng `/api/...`, **không sử dụng `/api/v1`**.
+**Cập nhật:** 21/11/2026 — Auth Service và Internal JWT Introspection  
+**Base URL dự kiến qua API Gateway:** `http://localhost:8080` (chưa xác nhận chạy tích hợp Gateway)  
+**Auth Service đang kiểm thử trực tiếp:** `http://localhost:8081`  
+**Quy ước:** API nghiệp vụ dùng `/api/...` (không dùng `/api/v1`); API nội bộ Auth dùng `/internal/auth/introspect`.
 
-> **Phân biệt trạng thái triển khai:** `W1-CODE` = đã có mã nguồn trong gói tuần 1 của Quân (chưa xác nhận build/chạy tích hợp); `DESIGN` = hợp đồng API đề xuất cho các phần việc tiếp theo, **chưa có nghĩa đã được lập trình**. Mọi thay đổi phải được thống nhất giữa các service trước khi merge vào `dev`.
+> **Định nghĩa trạng thái:** `AUTH-TESTED` = có source trên `feature/auth-service` và đã được kiểm thử Postman trong môi trường local; `W1-CODE` = ghi nhận có code từ tài liệu tuần 1, chưa xác minh tích hợp trong lần cập nhật này; `DESIGN` = API/luồng đề xuất, chưa mặc định coi là triển khai. Kết quả kiểm thử local không phải chứng nhận CI hoặc tích hợp liên service.
 
 ## 1. Phân chia service và người phụ trách
 
@@ -13,7 +14,7 @@
 |---|---|---|
 | `service-registry` (Eureka) | Quân | Đăng ký, khám phá service; không có REST nghiệp vụ `/api` |
 | `api-gateway` | Quân | Cổng 8080, routing, kiểm tra JWT ở các route riêng tư |
-| `auth-service` | Quân | Login, người dùng, vai trò OWNER/STAFF/TENANT |
+| `auth-service` | Quân | Đăng ký CUSTOMER, login, JWT, quản lý OWNER/STAFF/TENANT/CUSTOMER, thu hồi token, introspection nội bộ |
 | `notification-service` | Quân | Thông báo trong website, tích hợp sự kiện RabbitMQ |
 | `property-service` | Thiện | Khu trọ, phòng, giá/ảnh, tin công khai, STAFF theo khu, lịch xem phòng |
 | `rental-service` | Sáng | Hồ sơ thuê, hợp đồng, cọc, gia hạn, trả phòng, quyết toán |
@@ -23,49 +24,202 @@
 
 ## 2. Quy ước chung
 
-- Request/response mặc định `Content-Type: application/json`; endpoint tải ảnh dùng `multipart/form-data` nếu triển khai.
-- Endpoint riêng tư dùng `Authorization: Bearer <accessToken>`.
-- **Actor:** `GUEST` = chưa đăng nhập, chỉ xem phòng công khai và thông tin liên hệ; `OWNER` = duy nhất, toàn quyền; `STAFF` = tác nghiệp đúng khu được giao và lịch dẫn xem của mình; `TENANT` = chỉ xem/thao tác dữ liệu thuê của chính mình. Quyền OWNER bao gồm khả năng tác nghiệp STAFF.
-- **Không có đăng ký public.** Tài khoản STAFF/TENANT do người có quyền cấp. Trong mã tuần 1, API tạo tài khoản chỉ dành cho OWNER; khả năng STAFF hợp lệ cấp TENANT chỉ mở sau khi bổ sung kiểm tra phạm vi khu/hợp đồng.
-- GUEST **không đặt lịch trực tuyến, không giữ phòng, không tự ký hợp đồng**. Khách liên hệ OWNER ngoài website; OWNER ghi lịch xem và **chủ động chọn** STAFF, hoặc tự dẫn khách.
-- ID trả về dùng UUID dạng chuỗi; ngày `yyyy-MM-dd`; tháng hóa đơn `yyyy-MM`; ngày giờ ISO 8601 có múi giờ (ưu tiên `2026-11-05T14:00:00+07:00`). Giá trị tiền là số nguyên VND, không dùng số thực để xử lý tiền.
-- Phản hồi: `200` đọc/cập nhật, `201` tạo, `204` xóa/không có nội dung, `400` không hợp lệ, `401` chưa xác thực, `403` không có quyền, `404` không thấy tài nguyên hoặc không thuộc phạm vi, `409` xung đột dữ liệu/trạng thái. Mẫu lỗi chuẩn cần chốt chung trước tích hợp; chưa áp đặt một response wrapper mà code W1 chưa sử dụng.
-- Phân quyền phải kiểm tra **trong từng service**, không chỉ dựa vào Gateway. OWNER có quyền tổng thể; STAFF chỉ thao tác `propertyId` được phân công; TENANT chỉ có dữ liệu liên kết đến `userId` lấy từ JWT (không tin `userId` client gửi trong yêu cầu `/me`).
-- Một service không truy cập trực tiếp database service khác. Liên service qua REST/sự kiện, có kiểm tra nguồn gọi và xử lý lỗi/timeout.
+- API JSON mặc định `Content-Type: application/json`; tải ảnh dùng `multipart/form-data` nếu triển khai.
+- **Actor/role:** `GUEST` là người chưa đăng nhập, **không phải JWT role**. Các enum role của Auth: `OWNER`, `STAFF`, `TENANT`, `CUSTOMER`. `OWNER` là chủ trọ/quản trị; `STAFF` được thao tác theo khu được giao; `TENANT` là người thuê có quyền đối với hợp đồng/dữ liệu của mình; `CUSTOMER` là tài khoản tự đăng ký và **chưa có quyền TENANT**.
+- **Đăng ký hiện tại:** `POST /api/auth/register` là **public**, chỉ tạo `CUSTOMER`. `OWNER` chỉ tạo `STAFF` qua `POST /api/users`. Không cho tạo OWNER/TENANT trực tiếp; chuyển CUSTOMER ↔ TENANT đang bị chặn cho đến khi xác minh hợp đồng qua Rental Service. OWNER có thể chuyển CUSTOMER ↔ STAFF theo quy tắc Auth.
+- **Phân quyền:** OWNER có quyền quản trị cao nhất và về nghiệp vụ bao gồm khả năng STAFF, nhưng các service vẫn phải định nghĩa policy/role checks phù hợp. STAFF chỉ thao tác `propertyId` được phân công; TENANT chỉ được xem dữ liệu có liên kết đến user của mình. Không tin `userId`, `role` tự gửi từ phía client khi xử lý nghiệp vụ.
+- **Property/Viewing còn là DESIGN:** GUEST xem phòng công khai, liên hệ OWNER theo phương án ban đầu; việc bổ sung `CUSTOMER` trong Auth **chưa đồng nghĩa** đã xây API đặt lịch, giữ phòng hoặc ký hợp đồng trực tuyến. Các thay đổi nghiệp vụ này cần thống nhất với SRS và người phụ trách.
+- ID là UUID; ngày `yyyy-MM-dd`; tháng hóa đơn `yyyy-MM`; ngày giờ ISO 8601, Auth sử dụng UTC `Instant` (ví dụ `2026-11-21T16:00:00Z`). Tiền là số nguyên VND, không dùng số thực để tính tiền.
+- HTTP status thường gặp: `200` đọc/cập nhật; `201` tạo; `202` chấp nhận xử lý; `204` không có nội dung; `400` dữ liệu không hợp lệ; `401` không xác thực/token bị thu hồi; `403` thiếu quyền; `404` không tìm thấy/không trong phạm vi; `409` xung đột trạng thái. Nếu Auth không khả dụng để kiểm tra token, service phải **fail closed**, sử dụng lỗi hạ tầng phù hợp như `503`, không tự cho request đi qua.
+- Mỗi service sở hữu database riêng. Property, Rental, Billing, Payment **không truy cập trực tiếp `auth_db`**, cũng không lấy `JWT_SECRET` của Auth. Giao tiếp bằng REST hoặc event có xác thực caller, timeout và xử lý lỗi.
 
-### JWT (Auth Service)
+### 2.1. Hợp đồng JWT hiện tại của Auth
 
-- `sub`: UUID của tài khoản đăng nhập.
-- `roles`: **mảng chuỗi**, ví dụ `["ROLE_OWNER"]`, `["ROLE_STAFF"]`, `["ROLE_TENANT"]`.
-- Claim thêm: `iss`, `iat`, `exp`, `username` (theo mã tuần 1).
-- JWT dùng chung issuer/secret giữa các service ở môi trường demo; thay bằng cơ chế quản lý khóa an toàn trước triển khai thật.
-- `/actuator/health` là endpoint kỹ thuật, **không** thay thế API nghiệp vụ.
+- Thuật toán `HS256`, `iss = rental-property-auth`, thời gian hết hạn cấu hình mặc định **30 phút**.
+- Claims: `iss`, `sub` (UUID user), `iat`, `exp`, `username`, `roles` (mảng có một giá trị như `["ROLE_CUSTOMER"]`), `tv` (số phiên bản token của user trong database).
+- `JwtDecoder` của Auth kiểm tra chữ ký, issuer, thời gian hiệu lực, user tồn tại và `ACTIVE`, `tv` khớp `token_version` hiện tại, role khớp database. Sau logout, đổi/reset mật khẩu, khóa/mở khóa hoặc thay role, token cũ bị thu hồi bằng cách tăng `token_version`.
+- Auth cấp JWT bằng `JWT_SECRET`; service khác xác minh tính hiệu lực thông qua **Internal Token Introspection** (mục 3.2), không chỉ decode payload JWT.
+- `/actuator/health` là endpoint vận hành, **không thay thế** JWT verification.
 
 ## 3. Auth / User — Quân (`auth-service`)
 
+**URL kiểm thử hiện tại:** `http://localhost:8081`. Các URL nghiệp vụ `/api/...` sẽ đi qua Gateway `http://localhost:8080` sau khi cấu hình và kiểm thử routing. Các trạng thái bên dưới dựa trên source `feature/auth-service` và kết quả Postman local của nhóm.
+
+### 3.1. Authentication và User Management
+
 | Method | Path | Quyền | Nội dung | Trạng thái |
 |---|---|---|---|---|
-| `POST` | `/api/auth/login` | Public | Đăng nhập, nhận access token | W1-CODE |
-| `GET` | `/api/users/me` | JWT | Hồ sơ bản thân, không trả `passwordHash` | W1-CODE |
-| `GET` | `/api/users` | OWNER | Danh sách tài khoản | W1-CODE |
-| `GET` | `/api/users/staff` | OWNER | Danh sách tài khoản STAFF | W1-CODE |
-| `POST` | `/api/users` | OWNER | Tạo STAFF hoặc TENANT, không tạo OWNER | W1-CODE |
-| `PATCH` | `/api/users/{id}/status` | OWNER | Khóa/mở khóa tài khoản | W1-CODE |
+| `POST` | `/api/auth/register` | Public | Đăng ký tài khoản role **CUSTOMER** | AUTH-TESTED |
+| `POST` | `/api/auth/login` | Public | Login bằng username/password, cấp JWT | AUTH-TESTED |
+| `POST` | `/api/auth/logout` | JWT | Thu hồi toàn bộ JWT cũ của tài khoản bằng `token_version` | AUTH-TESTED |
+| `POST` | `/api/auth/change-password` | JWT | Đổi mật khẩu, thu hồi JWT cũ | AUTH-TESTED |
+| `POST` | `/api/auth/forgot-password` | Public | Trả `202`/thông báo chung, không tiết lộ email có tồn tại | CODE — SMTP NOT RUN |
+| `POST` | `/api/auth/reset-password` | Public | Đặt lại mật khẩu bằng reset token một lần, thu hồi JWT cũ | CODE — SMTP NOT RUN |
+| `GET` | `/api/users/me` | JWT | Lấy profile của mình | AUTH-TESTED |
+| `PATCH` | `/api/users/me` | JWT | Sửa fullName/email/phone của mình | AUTH-TESTED |
+| `GET` | `/api/users?role={role}&status={status}` | OWNER | Danh sách; filter `role`/`status` không bắt buộc | AUTH-TESTED |
+| `GET` | `/api/users/staff` | OWNER | Danh sách STAFF | AUTH-TESTED |
+| `GET` | `/api/users/{id}` | OWNER | Chi tiết user theo UUID | AUTH-TESTED |
+| `POST` | `/api/users` | OWNER | **Chỉ tạo STAFF**, không tạo OWNER/TENANT/CUSTOMER | AUTH-TESTED |
+| `PUT` | `/api/users/{id}` | OWNER | Sửa thông tin tài khoản không phải OWNER | AUTH-TESTED |
+| `PATCH` | `/api/users/{id}/status` | OWNER | `ACTIVE`/`LOCKED`; không áp dụng OWNER | AUTH-TESTED |
+| `PATCH` | `/api/users/{id}/role` | OWNER | CUSTOMER ↔ STAFF; TENANT chờ tích hợp Rental | AUTH-TESTED (TENANT bị chặn) |
+| `GET` | `/api/users/{id}/role` | OWNER | Trả role hiện tại (enum JSON) | AUTH-TESTED |
+| `GET` | `/api/users/{id}/role-history` | OWNER | Lịch sử thay đổi role | AUTH-TESTED |
 
-**Request mẫu**
+**Register CUSTOMER** — `POST /api/auth/register`:
 
 ```json
-POST /api/auth/login
+{
+  "username": "customer_demo",
+  "password": "<strong-password>",
+  "fullName": "Khách hàng A",
+  "email": "customer@example.com",
+  "phone": "0900000000"
+}
+```
+
+HTTP `201` trả `UserResponse` gồm `id`, `username`, `fullName`, `email`, `phone`, `role` (`CUSTOMER`), `status` (`ACTIVE`), `createdAt`, `updatedAt`, **không trả passwordHash**.
+
+**Login** — `POST /api/auth/login`:
+
+```json
 {"username":"owner","password":"<password>"}
 ```
 
-**Response mẫu** (cấu trúc theo mã tuần 1):
+Response HTTP `200`:
 
 ```json
-{"accessToken":"<jwt>","tokenType":"Bearer","expiresAt":"2026-11-05T18:00:00Z","role":"OWNER","userId":"<uuid>"}
+{
+  "accessToken": "<jwt>",
+  "tokenType": "Bearer",
+  "expiresAt": "2026-11-21T16:00:00Z",
+  "role": "OWNER",
+  "userId": "550e8400-e29b-41d4-a716-446655440000"
+}
 ```
 
-Tạo tài khoản: `POST /api/users` body `{"username":"staff1","password":"<strong-password>","fullName":"Nhân viên A","email":"staff@example.com","phone":"0900000000","role":"STAFF"}`. Đổi trạng thái: `{"status":"LOCKED"}` hoặc `{"status":"ACTIVE"}`.
+**OWNER tạo STAFF** — `POST /api/users`:
+
+```json
+{
+  "username": "staff_demo",
+  "password": "<strong-password>",
+  "fullName": "Nhân viên A",
+  "email": "staff@example.com",
+  "phone": "0900000000",
+  "role": "STAFF"
+}
+```
+
+**Đổi quyền** — `PATCH /api/users/{id}/role`:
+
+```json
+{
+  "role": "STAFF",
+  "reason": "Phân công nhân viên",
+  "contractReference": null,
+  "contractStatusConfirmed": false
+}
+```
+
+OWNER được phép chuyển CUSTOMER → STAFF → CUSTOMER; mỗi lần thay role sẽ tăng `token_version` và ghi `role_change_logs`. Chuyển CUSTOMER ↔ TENANT hiện trả HTTP `409`, `code=RENTAL_INTEGRATION_REQUIRED`. Trường `contractStatusConfirmed` từ client **không được coi là bằng chứng đã xác minh hợp đồng**; cấu hình `app.role-management.manual-confirmation-enabled=false` cần tiếp tục giữ trong lúc chưa tích hợp Rental.
+
+**Mẫu lỗi nghiệp vụ Auth:**
+
+```json
+{
+  "code": "CONFLICT",
+  "message": "Username already exists",
+  "timestamp": "2026-11-21T16:00:00Z"
+}
+```
+
+Mật khẩu phải có tối thiểu 10 ký tự, gồm chữ và số; dài tối đa 72 byte UTF-8. Enum trạng thái là `ACTIVE` và `LOCKED`. Reset token có thời hạn 15 phút, lưu hash và dùng một lần. **Luồng gửi Gmail SMTP thực tế chưa được kiểm thử**, không được ghi là PASS.
+
+### 3.2. Internal JWT Introspection (backend-to-backend)
+
+**Trạng thái: `AUTH-TESTED`**. API có mã nguồn trên nhánh `feature/auth-service`, **không phải API công khai cho Frontend**. Các service nghiệp vụ sử dụng nó để xác nhận JWT còn hiệu lực, bao gồm `token_version`.
+
+| Thuộc tính | Contract hiện tại |
+|---|---|
+| Method | `POST` |
+| Path | `/internal/auth/introspect` |
+| Dev URL | `http://localhost:8081/internal/auth/introspect` |
+| Header bắt buộc | `Content-Type: application/json`, `X-Service-Key: <internal-service-secret>` |
+| Authorization | **No Auth đối với request introspect**; JWT cần kiểm tra ở JSON body |
+| JSON body | `{"token":"<raw-jwt>"}` — không có prefix `Bearer ` |
+| Key đúng, token hợp lệ | HTTP `200` + `active: true` |
+| Key đúng, token hết hạn/sai/đã thu hồi | HTTP `200` + `active: false` |
+| Key sai/thiếu | HTTP `401`, `code: INVALID_SERVICE_KEY` |
+| Body thiếu/rỗng token, key đúng | HTTP `400`, `code: VALIDATION_ERROR` |
+
+**Request:**
+
+```http
+POST /internal/auth/introspect
+Content-Type: application/json
+X-Service-Key: <internal-service-secret>
+```
+
+```json
+{"token":"<raw-jwt>"}
+```
+
+**Response hợp lệ — HTTP `200`:**
+
+```json
+{
+  "active": true,
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "customer_demo",
+  "role": "CUSTOMER",
+  "expiresAt": "2026-11-21T16:00:00Z"
+}
+```
+
+**Token không hợp lệ/đã bị thu hồi — HTTP `200`:**
+
+```json
+{
+  "active": false,
+  "userId": null,
+  "username": null,
+  "role": null,
+  "expiresAt": null
+}
+```
+
+**Service Key sai hoặc thiếu — HTTP `401`:**
+
+```json
+{"code":"INVALID_SERVICE_KEY","message":"Invalid internal service credentials"}
+```
+
+> **Quan trọng:** `200 + active:false` chỉ nghĩa là Auth xử lý được request introspection, **không xác thực được JWT**. Service gọi phải trả `401` cho client nếu JWT không còn hợp lệ. HTTP `401 INVALID_SERVICE_KEY` là lỗi xác thực *backend gọi Auth*.
+
+**Quy trình xác thực liên service:**
+
+1. Client/Payment chuyển `Authorization: Bearer <user-jwt>` đến service nghiệp vụ khi hành động **thay mặt người dùng**.
+2. Service nhận JWT gọi trực tiếp Auth nội bộ bằng `POST /internal/auth/introspect`, gửi `X-Service-Key` riêng và JWT dạng raw trong body. **Không gửi JWT đã hết hạn vào Authorization header của request introspect.**
+3. Nếu `active=true`, dùng `userId` và `role` từ **response của Auth** để kiểm tra quyền nghiệp vụ và quyền sở hữu tài nguyên; không tin dữ liệu role/userId do client tự cung cấp.
+4. Nếu `active=false`, từ chối với `401`; nếu token hợp lệ nhưng thiếu quyền, trả `403` (hoặc `404` để tránh lộ tài nguyên theo policy service).
+5. Khi Auth timeout/không phản hồi, service **fail closed**, không cho qua xác thực; trả mã lỗi hạ tầng thích hợp, chẳng hạn `503`, đồng thời theo dõi lỗi/timeout.
+
+**Các quy định về khóa và SOA:**
+
+- `JWT_SECRET`: chỉ **Auth Service** giữ để ký/xác minh HS256; không phân phối cho Property/Rental/Billing/Payment.
+- `AUTH_INTERNAL_SERVICE_KEY`: secret riêng tối thiểu 32 byte UTF-8, xác thực backend có quyền gọi introspection qua `X-Service-Key`; **khác `JWT_SECRET`**. Giai đoạn hiện tại dùng một shared key, chưa có danh tính/khóa riêng từng service.
+- Không đưa hai khóa lên Frontend/Postman Collection public/GitHub; dùng biến môi trường và cơ chế quản lý secret. Không đưa `/internal/auth/introspect` thành route công khai trên Gateway; khi triển khai qua mạng cần network isolation + HTTPS/TLS + hạn chế thời gian chờ và luân chuyển khóa.
+- Payment có thể forward Bearer JWT sang Property nếu xử lý thay mặt người dùng; Property **vẫn phải introspect**. Với lời gọi nội bộ không đại diện user hoặc callback của payment provider, dùng cơ chế xác thực service-to-service **riêng**, không mượn JWT của OWNER hoặc người dùng.
+- Auth xác thực danh tính/token; **mỗi service vẫn tự kiểm tra authorization nghiệp vụ** (theo tài nguyên/khu/hợp đồng/hóa đơn của người dùng).
+
+### 3.3. Trạng thái kiểm thử Auth
+
+- Auth Regression: **57 request, 104 assertions PASS** tại môi trường local (ngày 21/11/2026, theo báo cáo kiểm thử của nhóm).
+- Internal Introspection: **30 request, 64 assertions PASS**, chạy lại thành công hai lượt liên tiếp (ngày 21/11/2026, theo báo cáo kiểm thử của nhóm).
+- Collections và environment mẫu được lưu trong thư mục `postman/` ở repository; **không commit** `JWT_SECRET`, `AUTH_INTERNAL_SERVICE_KEY`, JWT thật hoặc mật khẩu OWNER.
+- **Chưa kiểm thử** Forgot/Reset Password qua Gmail SMTP thật và end-to-end Payment → Property → Auth. Chưa được xác nhận CI, kiểm thử tải hoặc an ninh môi trường triển khai.
 
 ## 4. Property / Room / Viewing — Thiện (`property-service`)
 
@@ -200,28 +354,28 @@ Service nào tổng hợp báo cáo và cách lấy snapshot từ Property/Renta
 
 1. **Hiển thị phòng:** Property Service chỉ trả phòng trống được OWNER công khai; GUEST xem và liên hệ OWNER ngoài website.
 2. **Xem phòng:** OWNER ghi lịch → Property Service lọc STAFF theo khu/lịch → OWNER gán STAFF hoặc tự dẫn → STAFF báo kết quả; **không phát sinh giữ phòng**.
-3. **Kích hoạt thuê:** Rental Service tạo DRAFT → OWNER kích hoạt → xác minh phòng và tránh hợp đồng chồng → đồng bộ Property `OCCUPIED` → OWNER/STAFF hợp lệ cấp tài khoản TENANT → Notification thông báo.
+3. **Kích hoạt thuê:** Rental Service tạo DRAFT → OWNER kích hoạt → xác minh phòng và tránh hợp đồng chồng → đồng bộ Property `OCCUPIED` → **thiết kế Rental xác minh hợp đồng và tích hợp Auth để chuyển CUSTOMER thành TENANT** (chưa triển khai, không cấp TENANT trực tiếp) → Notification thông báo.
 4. **Hóa đơn:** Billing nhận hợp đồng ACTIVE/chỉ số/đơn giá, tạo DRAFT → phát hành ISSUED → TENANT xem trong cổng cá nhân.
-5. **Thanh toán:** TENANT khởi tạo giao dịch Payment → Provider sandbox trả kết quả → Payment xác minh, chống callback trùng → Billing ghi nhận công nợ đúng một lần → Notification gửi thông báo.
+5. **Thanh toán:** TENANT khởi tạo giao dịch Payment → Payment/Property/Billing introspect JWT qua Auth khi cần → Provider sandbox trả kết quả → Payment xác minh, chống callback trùng → Billing ghi nhận công nợ đúng một lần → Notification gửi thông báo. Callback provider hoặc lời gọi thuần backend dùng xác thực service-to-service riêng.
 6. **Trả phòng:** TENANT gửi yêu cầu → OWNER/STAFF xử lý, chốt công nợ/cọc → Rental kết thúc ENDED → Property đưa phòng về AVAILABLE khi đủ điều kiện.
 
 ## 11. Checklist trước khi merge PR của mỗi service
 
-- Đúng đường dẫn `/api/...` và khai báo Gateway, không có `/v1`.
+- Đúng đường dẫn `/api/...` và khai báo Gateway, không có `/v1`. Riêng `/internal/auth/introspect` chỉ dùng nội bộ, **không public qua Gateway**.
 - Controller/DTO/validation phù hợp hợp đồng, status code và phân quyền theo bảng.
-- Không lộ passwordHash, không cho STAFF đọc khu khác, TENANT đọc hồ sơ người khác.
-- Có xử lý `400`, `401`, `403`, `404`, `409`; không trả lỗi 500 cho xung đột nghiệp vụ dự đoán trước.
+- Không lộ `passwordHash`, `JWT_SECRET`, `AUTH_INTERNAL_SERVICE_KEY`; không cho STAFF đọc khu khác, TENANT đọc hồ sơ người khác, CUSTOMER vượt quyền TENANT.
+- Có xử lý `400`, `401`, `403`, `404`, `409`; không trả lỗi 500 cho xung đột nghiệp vụ dự đoán trước. Service nhận Bearer JWT phải introspect Auth; `active:false` nghĩa là token không hợp lệ; timeout/không thể kết nối Auth thì fail closed.
 - Không tự ghi DB service khác; quy tắc trạng thái, chống trùng kỳ và chống giao dịch lặp có kiểm thử.
 - Thêm request/response mẫu vào Postman của module; thông báo thay đổi contract trước khi tạo PR vào `dev`.
 
 ## 12. Điểm cần thống nhất thêm (chưa được coi là đã hoàn thành)
 
-- Quyền STAFF có thể cấp TENANT trong giai đoạn nào và kiểm tra liên kết hợp đồng/khu thế nào.
-- Phân vùng dữ liệu STAFF theo `propertyId`, kiểm tra quyền liên service và cách vô hiệu hóa JWT khi khóa tài khoản.
+- **Chưa triển khai:** quy tắc chuyển CUSTOMER ↔ TENANT sau khi Rental xác minh hợp đồng; caller backend nào được phép kích hoạt chuyển role và quyền OWNER/STAFF liên quan.
+- Phân vùng dữ liệu STAFF theo `propertyId` và kiểm tra quyền nghiệp vụ. **Đã có trong Auth:** thu hồi JWT qua `token_version` và introspection; **chưa xác nhận** các service khác đã tích hợp xác thực.
 - Cơ chế cập nhật trạng thái phòng/hợp đồng giữa Property và Rental khi một service gặp lỗi.
 - Quy tắc tính giá dịch vụ, tiền cọc, hoàn cọc và đối soát công nợ giữa Rental/Billing/Payment.
-- Schema sự kiện RabbitMQ, retry/DLQ/outbox, xác thực service-to-service.
+- Schema sự kiện RabbitMQ, retry/DLQ/outbox; bảo vệ mạng cho introspection và quản lý/luân chuyển khóa; xác thực service-to-service cho những lời gọi không đại diện người dùng.
 - Chuẩn lỗi JSON chung, phân trang, tải ảnh, logs/audit, migration database.
 - Chuẩn callback sandbox và dịch vụ chịu trách nhiệm tổng hợp dashboard.
 
-**Nguồn nghiệp vụ:** SRS cuối cùng của dự án (GUEST/OWNER/STAFF/TENANT, FR-01 → FR-22, UC-01 → UC-10). Danh sách các endpoint `DESIGN` là **đề xuất thiết kế API để chia việc và tích hợp**, không phải các đường dẫn được SRS quy định cố định.
+**Nguồn nghiệp vụ:** SRS nền trước đây của dự án (GUEST/OWNER/STAFF/TENANT, FR-01 → FR-22, UC-01 → UC-10) cùng mã Auth thực tế hiện bổ sung role CUSTOMER, đăng ký public và JWT introspection. **Những thay đổi ảnh hưởng các nghiệp vụ Property/Rental/Billing/Payment cần được đồng bộ SRS riêng**, không tự coi các API DESIGN là đã triển khai. Danh sách endpoint DESIGN chỉ là đề xuất tích hợp, không phải đường dẫn được SRS quy định cố định.

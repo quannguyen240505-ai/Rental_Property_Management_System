@@ -1,0 +1,1658 @@
+{
+  "info": {
+    "_postman_id": "7f475dbf-4aab-4277-9aff-e6971a9dfe9d",
+    "name": "Rental Auth - Introspection 30 Tests - RUN COLLECTION",
+    "description": "Standalone Postman collection with 30 sequential requests at collection root. Select collection menu > Run collection. No folder-run necessary. Requires environment variables: baseUrl, ownerUsername, ownerPassword, internalServiceKey.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "58441890",
+    "_collection_link": "https://go.postman.co/collection/58441890-7f475dbf-4aab-4277-9aff-e6971a9dfe9d?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "TC_INT_001 | Setup QA data and health",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Before request: prepare independent QA identities for this folder.",
+              "const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);",
+              "const vars = ['intCustomerId', 'intJwt0', 'intJwt1', 'intJwt2', 'intJwt3', 'intJwt4', 'intJwt5', 'intJwt6', 'intOwnerToken', 'intTamperedJwt'];",
+              "vars.forEach(k => pm.collectionVariables.unset(k));",
+              "pm.collectionVariables.set('intRunId', id);",
+              "pm.collectionVariables.set('intUsername', 'qa_int_' + id);",
+              "pm.collectionVariables.set('intEmail', 'qa_int_' + id + '@example.com');",
+              "pm.collectionVariables.set('intPassword', 'Customer@12345');",
+              "pm.collectionVariables.set('intNewPassword', 'NewCustomer@12345');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Health UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+              "pm.test('Service key configured (>= 32 characters)', () => {",
+              " const key = pm.variables.get('internalServiceKey');",
+              " pm.expect(key, 'Set internalServiceKey in active Postman Environment').to.be.a('string').and.to.have.lengthOf.at.least(32);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "actuator",
+            "health"
+          ]
+        },
+        "description": "Before: generate unique QA username/email and reset previous folder tokens. After: check health and service key exists."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_002 | Register disposable CUSTOMER",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d = pm.response.json();",
+              "pm.test('Role CUSTOMER and ACTIVE', () => {pm.expect(d.role).to.eql('CUSTOMER');pm.expect(d.status).to.eql('ACTIVE');pm.expect(d.id).to.be.a('string').and.not.empty;});",
+              "if (pm.response.code === 201 && d.id) pm.collectionVariables.set('intCustomerId', d.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intPassword}}\",\n  \"fullName\": \"Introspection QA Customer\",\n  \"email\": \"{{intEmail}}\",\n  \"phone\": \"0901234987\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "description": "Before: use unique credentials prepared in INT_001. After: assert CUSTOMER, store intCustomerId."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_003 | Login CUSTOMER and store JWT",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('CUSTOMER JWT issued', () => { pm.expect(d.role).to.eql('CUSTOMER');pm.expect(d.accessToken).to.be.a('string').and.not.empty;pm.expect(d.userId).to.eql(pm.collectionVariables.get('intCustomerId'));});",
+              "if (pm.response.code === 200 && d.accessToken) pm.collectionVariables.set('intJwt0',d.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "After: store intJwt0; this is the original CUSTOMER JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_004 | Valid token => active true",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = true', () => pm.expect(d.active).to.eql(true));",
+              "pm.test('Identity and role agree with login', () => {",
+              " pm.expect(d.userId).to.eql(pm.collectionVariables.get('intCustomerId'));",
+              " pm.expect(d.username).to.eql(pm.collectionVariables.get('intUsername'));",
+              " pm.expect(d.role).to.eql('CUSTOMER');",
+              " pm.expect(d.expiresAt).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt0}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Correct X-Service-Key + valid JWT. Assert active, UUID, username, role, expiration."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_005 | Missing service key => 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "pm.test('Service authentication denied', () => pm.expect(pm.response.json().code).to.eql('INVALID_SERVICE_KEY'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt0}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "No X-Service-Key. Correct JWT alone must not authorize introspection."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_006 | Wrong service key => 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "pm.test('Wrong key denied', () => pm.expect(pm.response.json().code).to.eql('INVALID_SERVICE_KEY'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "incorrect-local-service-key",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt0}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Wrong X-Service-Key rejected before token processing."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_007 | Bearer JWT cannot replace service key",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "pm.test('Still requires X-Service-Key', () => pm.expect(pm.response.json().code).to.eql('INVALID_SERVICE_KEY'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intJwt0}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt0}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Send valid Bearer authorization header but omit X-Service-Key. Must return 401."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_008 | Modified signature => inactive",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Before request: change the first signature character (not only trailing pad bits).",
+              "const token = pm.collectionVariables.get('intJwt0') || '';",
+              "const parts = token.split('.');",
+              "if (parts.length === 3 && parts[2].length > 1) {",
+              " const original = parts[2][0];",
+              " parts[2] = (original === 'A' ? 'B' : 'A') + parts[2].slice(1);",
+              " pm.collectionVariables.set('intTamperedJwt', parts.join('.'));",
+              "} else {",
+              " pm.collectionVariables.set('intTamperedJwt', 'not.a.valid.jwt');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));",
+              "pm.test('No identity returned', () => { pm.expect(d.userId).to.be.null;pm.expect(d.role).to.be.null; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intTamperedJwt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Before: tamper JWT signature. After: assert active=false, no identity disclosed."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_009 | Malformed JWT => inactive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"not.a.valid.jwt\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Malformed JWT with valid service key should get 200 active=false, not an unhandled 500."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_010 | Blank token => 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Request validation error', () => pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "@NotBlank on token requires nonempty string."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_011 | Missing token property => 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Request validation error', () => pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "No token property should fail request validation."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_012 | CUSTOMER logout (revoke JWT)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Logout message', () => pm.expect(pm.response.json().message).to.be.a('string'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intJwt0}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "logout"
+          ]
+        },
+        "description": "JWT version increments in database; original JWT revoked."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_013 | Logged-out JWT => inactive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt0}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Auth checks tv against users.token_version; previous login JWT no longer valid."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_014 | Login again after logout",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('Re-login CUSTOMER success',()=>pm.expect(d.role).to.eql('CUSTOMER'));",
+              "if(pm.response.code===200&&d.accessToken)pm.collectionVariables.set('intJwt1',d.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Logout invalidates JWT, not password; save intJwt1."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_015 | CUSTOMER changes password",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Password updated',()=>pm.expect(pm.response.json().message).to.include('Password changed'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intJwt1}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentPassword\": \"{{intPassword}}\",\n  \"newPassword\": \"{{intNewPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/change-password",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "change-password"
+          ]
+        },
+        "description": "A second token_version increment expected."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_016 | JWT revoked on password change",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt1}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Check token_version revocation after password change."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_017 | Login with new password",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('New password works',()=>pm.expect(d.role).to.eql('CUSTOMER'));",
+              "if(pm.response.code===200&&d.accessToken)pm.collectionVariables.set('intJwt2',d.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intNewPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "After: save intJwt2 with CUSTOMER role."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_018 | OWNER login for role/status checks",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('OWNER login success',()=>{pm.expect(d.role).to.eql('OWNER');pm.expect(d.accessToken).to.be.a('string').and.not.empty;});",
+              "if(pm.response.code===200&&d.accessToken)pm.collectionVariables.set('intOwnerToken',d.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{ownerUsername}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Uses real OWNER test credentials from environment but does not modify OWNER."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_019 | OWNER promotes QA CUSTOMER to STAFF",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Role now STAFF',()=>pm.expect(pm.response.json().role).to.eql('STAFF'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intOwnerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role\": \"STAFF\",\n  \"reason\": \"Introspection regression promotion check\",\n  \"contractStatusConfirmed\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/users/{{intCustomerId}}/role",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "{{intCustomerId}}",
+            "role"
+          ]
+        },
+        "description": "Creates role history and invalidates previously issued CUSTOMER JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_020 | Old JWT revoked after role change",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt2}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Token claim roles and tv no longer match user table."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_021 | Promoted STAFF logs in",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('STAFF role issued',()=>pm.expect(d.role).to.eql('STAFF'));",
+              "if(pm.response.code===200&&d.accessToken)pm.collectionVariables.set('intJwt3',d.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intNewPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "After: save intJwt3 containing STAFF role."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_022 | OWNER locks QA STAFF",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Account LOCKED',()=>pm.expect(pm.response.json().status).to.eql('LOCKED'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intOwnerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"LOCKED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/users/{{intCustomerId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "{{intCustomerId}}",
+            "status"
+          ]
+        },
+        "description": "Status LOCKED + token_version increment."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_023 | Locked user JWT => inactive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt3}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Locked user should not be authenticated even with properly signed, unexpired JWT."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_024 | Locked user login => 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "pm.test('Invalid credentials error',()=>pm.expect(pm.response.json().code).to.eql('INVALID_CREDENTIALS'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intNewPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Direct login also denied while LOCKED."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_025 | OWNER unlocks QA STAFF",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Account ACTIVE',()=>pm.expect(pm.response.json().status).to.eql('ACTIVE'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intOwnerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/users/{{intCustomerId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "{{intCustomerId}}",
+            "status"
+          ]
+        },
+        "description": "Unlock increments token_version again; old JWT must stay revoked."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_026 | Unlocked STAFF gets fresh JWT",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('Fresh STAFF JWT',()=>pm.expect(d.role).to.eql('STAFF'));",
+              "if(pm.response.code===200&&d.accessToken)pm.collectionVariables.set('intJwt4',d.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{intUsername}}\",\n  \"password\": \"{{intNewPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "After: save intJwt4 after unlock."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_027 | New JWT after unlock => active true",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = true', () => pm.expect(d.active).to.eql(true));",
+              "pm.test('Identity restored', () => {pm.expect(d.userId).to.eql(pm.collectionVariables.get('intCustomerId'));pm.expect(d.role).to.eql('STAFF');});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt4}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Valid new JWT should be active after unlock."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_028 | OWNER demotes QA STAFF back to CUSTOMER",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));\npm.test('Role restored CUSTOMER',()=>pm.expect(pm.response.json().role).to.eql('CUSTOMER'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{intOwnerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role\": \"CUSTOMER\",\n  \"reason\": \"Introspection regression cleanup\",\n  \"contractReference\": null,\n  \"contractStatusConfirmed\": false\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/users/{{intCustomerId}}/role",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "{{intCustomerId}}",
+            "role"
+          ]
+        },
+        "description": "Restores QA account to CUSTOMER (does not delete account), increments token_version."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_029 | STAFF JWT revoked after demotion",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d = pm.response.json();",
+              "pm.test('active = false', () => pm.expect(d.active).to.eql(false));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Service-Key",
+            "value": "{{internalServiceKey}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{intJwt4}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Old STAFF JWT no longer matches current CUSTOMER role."
+      },
+      "response": []
+    },
+    {
+      "name": "TC_INT_030 | End of suite: health and clear tokens",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Health UP',()=>pm.expect(pm.response.json().status).to.eql('UP'));",
+              "// After response: remove transient credentials/JWTs from collection variables.",
+              "const vars=['intCustomerId','intJwt0','intJwt1','intJwt2','intJwt3','intJwt4','intJwt5','intJwt6','intOwnerToken','intTamperedJwt','intPassword','intNewPassword'];",
+              "vars.forEach(k => pm.collectionVariables.unset(k));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "actuator",
+            "health"
+          ]
+        },
+        "description": "After: clear transient Postman tokens/passwords. QA account stays ACTIVE CUSTOMER in MySQL; no production data modified."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "intRunId",
+      "value": ""
+    },
+    {
+      "key": "intUsername",
+      "value": ""
+    },
+    {
+      "key": "intEmail",
+      "value": ""
+    }
+  ]
+}
