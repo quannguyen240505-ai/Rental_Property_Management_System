@@ -3539,6 +3539,714 @@
       "description": "Run after Auth groups 01-04 and before Auth 05-08. Uses ownerToken, staffToken, customerToken from the unchanged Auth testcase chain. The first property create request generates unique QA fixture IDs. Property auth must be configured with the same AUTH_INTERNAL_SERVICE_KEY as Auth."
     },
     {
+      "name": "04C - Viewing appointments (FR-09 / 10 / 11)",
+      "item": [
+        {
+          "name": "TV_00 OWNER assigns STAFF to QA property (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('Correct property and staff',()=>{const x=pm.response.json();pm.expect(x.propertyId).to.eql(pm.environment.get('propertyId'));pm.expect(x.staffId).to.eql(pm.environment.get('staffId'));});"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const required=['propertyBaseUrl','propertyId','roomId','ownerToken','staffToken','staffId','customerToken','customerId'];",
+                  "for(const key of required){if(!pm.environment.get(key)){throw new Error('Missing '+key+'; run Auth + Property preparation first');}}",
+                  "const day=new Date(Date.now()+2*24*60*60*1000);",
+                  "const y=day.getUTCFullYear(), m=String(day.getUTCMonth()+1).padStart(2,'0'), d=String(day.getUTCDate()).padStart(2,'0');",
+                  "const prefix=y+'-'+m+'-'+d;",
+                  "pm.environment.set('viewingStartAt',prefix+'T10:00:00');",
+                  "pm.environment.set('viewingEndAt',prefix+'T10:45:00');",
+                  "pm.environment.set('viewingStartAt2',prefix+'T14:00:00');",
+                  "pm.environment.set('viewingEndAt2',prefix+'T14:45:00');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}/staff/{{staffId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "staff",
+                "{{staffId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_01 OWNER publishes QA room (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('Room published',()=>pm.expect(pm.response.json().published).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"published\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rooms",
+                "{{roomId}}",
+                "publication"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_02 CUSTOMER requests viewing (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){const x=pm.response.json();pm.environment.set('viewingId',x.id);pm.test('REQUESTED; no STAFF',()=>{pm.expect(x.status).to.eql('REQUESTED');pm.expect(x.staffId).to.eql(null);pm.expect(x.customerId).to.eql(pm.environment.get('customerId'));});}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startAt\": \"{{viewingStartAt}}\",\n  \"endAt\": \"{{viewingEndAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_03 REQUEST does not reserve room (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('Room remains AVAILABLE',()=>pm.expect(pm.response.json().status).to.eql('AVAILABLE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rooms",
+                "{{roomId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_04 CUSTOMER lists own viewings (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('Own list contains viewing',()=>pm.expect(pm.response.json().some(x=>x.id===pm.environment.get('viewingId'))).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/my",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "my"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_05 STAFF lists unclaimed viewings of assigned property (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('Available includes requested viewing',()=>pm.expect(pm.response.json().some(x=>x.id===pm.environment.get('viewingId'))).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/available",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "available"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_06 STAFF claims viewing (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('CONFIRMED and staff assigned',()=>{const x=pm.response.json();pm.expect(x.status).to.eql('CONFIRMED');pm.expect(x.staffId).to.eql(pm.environment.get('staffId'));});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId}}/claim",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId}}",
+                "claim"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_07 Duplicate STAFF claim rejected (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409',()=>pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId}}/claim",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId}}",
+                "claim"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_08 STAFF finishes viewing (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('COMPLETED',()=>pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"result\": \"COMPLETED\",\n  \"notes\": \"Viewed in automated QA run\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId}}/result",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId}}",
+                "result"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_09 CUSTOMER cannot cancel completed (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409',()=>pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId}}/cancel",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_10 STAFF cannot create CUSTOMER viewing (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403',()=>pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startAt\": \"{{viewingStartAt}}\",\n  \"endAt\": \"{{viewingEndAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_11 CUSTOMER creates second request (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){const x=pm.response.json();pm.environment.set('viewingId2',x.id);pm.test('REQUESTED',()=>pm.expect(x.status).to.eql('REQUESTED'));}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"startAt\": \"{{viewingStartAt2}}\",\n  \"endAt\": \"{{viewingEndAt2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_12 CUSTOMER cancels own request (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('CANCELLED',()=>pm.expect(pm.response.json().status).to.eql('CANCELLED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId2}}/cancel",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId2}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_13 CUSTOMER cannot see STAFF queue (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403',()=>pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/available",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "available"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TV_14 OWNER can view confirmed/completed viewing details (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+                  "pm.test('Completed record still exists',()=>pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "STAFF scope - OWNER assignment + RBAC",
       "item": [
         {
