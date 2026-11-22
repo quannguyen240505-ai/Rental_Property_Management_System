@@ -1,11 +1,11 @@
 {
   "info": {
-    "_postman_id": "179ab5b7-4011-4dd2-8729-0d6b38e9fb0a",
+    "_postman_id": "b0e9f738-9b74-4e74-bdce-d18068a7a162",
     "name": "Rental Property - Auth Service | Automated API Regression",
     "description": "57 ordered API test cases grounded in feature/auth-service. Run against an isolated local MySQL auth_db through http://localhost:8081. Must run in the listed order. Creates unique CUSTOMER and STAFF per run; never changes or locks OWNER. See README for configuration and limitations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "58441890",
-    "_collection_link": "https://go.postman.co/collection/58441890-179ab5b7-4011-4dd2-8729-0d6b38e9fb0a?source=collection_link"
+    "_exporter_id": "58326986",
+    "_collection_link": "https://go.postman.co/collection/58326986-b0e9f738-9b74-4e74-bdce-d18068a7a162?source=collection_link"
   },
   "item": [
     {
@@ -1543,6 +1543,2002 @@
       "description": "HTTP 401 without valid token and 403 with valid token but insufficient role."
     },
     {
+      "name": "04B - PROPERTY SERVICE | Extend existing Auth tokens",
+      "item": [
+        {
+          "name": "01 - Property CRUD (OWNER)",
+          "item": [
+            {
+              "name": "TC_PROP_038 | Property Service health (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "pm.test('Health status UP', () => { pm.expect(pm.response.json().status).to.eql('UP'); });",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/actuator/health",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health"
+                  ]
+                },
+                "description": "Verify Property Service (8082) is ready without authorization."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_001 | Create QA property (201)",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Generate a unique QA fixture for each collection run; never depend on prior IDs.",
+                      "const suffix = (Date.now().toString(36) + Math.floor(Math.random() * 0x100000).toString(36)).toUpperCase().slice(-14);",
+                      "pm.environment.set('qaRunSuffix', suffix);",
+                      "pm.environment.set('roomCode', 'QA-' + suffix);",
+                      "pm.environment.set('propertyId', '');",
+                      "pm.environment.set('roomId', '');",
+                      "pm.environment.set('unknownId', pm.variables.replaceIn('{{$guid}}'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                      "if (pm.response.code === 201) {",
+                      "const data = pm.response.json();",
+                      "pm.test('Created property ID is UUID', function () {",
+                      "    pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+                      "});",
+                      "pm.test('Property name matches request', function () {",
+                      "    pm.expect(data.name).to.eql('QA - Property ' + pm.environment.get('qaRunSuffix'));",
+                      "});",
+                      "pm.test('Property address persisted', function () {",
+                      "    pm.expect(data.address).to.include('Quy Nhơn');",
+                      "});",
+                      "if (data.id) pm.environment.set('propertyId', data.id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"QA - Property {{qaRunSuffix}}\",\n  \"address\": \"Địa chỉ kiểm thử tự động - Quy Nhơn\",\n  \"description\": \"Created by Thiện Property regression suite; do not use for production\",\n  \"contactPhone\": \"0900000000\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties"
+                  ]
+                },
+                "description": "TC_PROP_001. Creates unique QA property and captures propertyId. Leaving QA data in local database is intentional."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_002 | List properties (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Response is array',()=>pm.expect(data).to.be.an('array'));",
+                      "pm.test('Created property appears',()=>pm.expect(data.some(p => p.id===pm.environment.get('propertyId'))).to.eql(true));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties"
+                  ]
+                },
+                "description": "TC_PROP_002. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_003 | Get property by ID (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Property ID matches',()=>pm.expect(data.id).to.eql(pm.environment.get('propertyId')));",
+                      "pm.test('Name correct',()=>pm.expect(data.name).to.eql('QA - Property '+pm.environment.get('qaRunSuffix')));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties",
+                    "{{propertyId}}"
+                  ]
+                },
+                "description": "TC_PROP_003. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_004 | Unknown property (404)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties/{{unknownId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties",
+                    "{{unknownId}}"
+                  ]
+                },
+                "description": "TC_PROP_004. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            }
+          ],
+          "description": "Authenticated property creation/list/detail. OWNER role currently protects management endpoints; data-specific ownership is not yet implemented."
+        },
+        {
+          "name": "02 - Room CRUD / Duplicate (OWNER)",
+          "item": [
+            {
+              "name": "TC_PROP_005 | Create room (201)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                      "if (pm.response.code === 201) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Created room ID is UUID',()=>pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                      "pm.test('Room belongs to created property',()=>pm.expect(data.propertyId).to.eql(pm.environment.get('propertyId')));",
+                      "pm.test('New room is AVAILABLE',()=>pm.expect(data.status).to.eql('AVAILABLE'));",
+                      "pm.test('New room starts unpublished',()=>pm.expect(data.published).to.eql(false));",
+                      "if(data.id) pm.environment.set('roomId',data.id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"code\": \"{{roomCode}}\",\n  \"title\": \"Phòng QA ban đầu\",\n  \"description\": \"Room created for automated test\",\n  \"floorNumber\": 1,\n  \"areaM2\": 25.5,\n  \"monthlyRent\": 2500000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_005. Expected HTTP 201; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_006 | Duplicate code in same property (409)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"code\": \"{{roomCode}}\",\n  \"title\": \"Phòng QA ban đầu\",\n  \"description\": \"Room created for automated test\",\n  \"floorNumber\": 1,\n  \"areaM2\": 25.5,\n  \"monthlyRent\": 2500000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_006. Expected HTTP 409; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_007 | List rooms of property (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Response is array',()=>pm.expect(data).to.be.an('array'));",
+                      "pm.test('New room exists in property',()=>pm.expect(data.some(r=>r.id===pm.environment.get('roomId'))).to.eql(true));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms?propertyId={{propertyId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ],
+                  "query": [
+                    {
+                      "key": "propertyId",
+                      "value": "{{propertyId}}"
+                    }
+                  ]
+                },
+                "description": "TC_PROP_007. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_008 | Get room by ID (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Room ID matches',()=>pm.expect(data.id).to.eql(pm.environment.get('roomId')));",
+                      "pm.test('Room code matches',()=>pm.expect(data.code).to.eql(pm.environment.get('roomCode')));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_008. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_009 | Update room (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Title updated',()=>pm.expect(data.title).to.eql('Phòng QA đã cập nhật'));",
+                      "pm.test('Monthly rent updated',()=>pm.expect(data.monthlyRent).to.eql(2800000));",
+                      "pm.test('Status not modified',()=>pm.expect(data.status).to.eql('AVAILABLE'));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"{{roomCode}}\",\n  \"title\": \"Phòng QA đã cập nhật\",\n  \"description\": \"Updated by Postman regression\",\n  \"floorNumber\": 2,\n  \"areaM2\": 27.5,\n  \"monthlyRent\": 2800000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_009. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_010 | Verify room update persisted (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('New floor persisted',()=>pm.expect(data.floorNumber).to.eql(2));",
+                      "pm.test('Rent persisted',()=>pm.expect(data.monthlyRent).to.eql(2800000));",
+                      "pm.test('Room still hidden',()=>pm.expect(data.published).to.eql(false));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_010. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            }
+          ],
+          "description": "Creates room with run-unique code, checks duplicate 409, reads and updates."
+        },
+        {
+          "name": "03 - Public visibility & publication",
+          "item": [
+            {
+              "name": "TC_PROP_011 | Public list before publication (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Public response is array',()=>pm.expect(data).to.be.an('array'));",
+                      "pm.test('Unpublished QA room hidden',()=>pm.expect(data.some(r=>r.id===pm.environment.get('roomId'))).to.eql(false));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_011. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_012 | Public detail hidden (404)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_012. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_013 | Publish AVAILABLE room (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Room published=true',()=>pm.expect(data.published).to.eql(true));",
+                      "pm.test('Room still AVAILABLE',()=>pm.expect(data.status).to.eql('AVAILABLE'));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}",
+                    "publication"
+                  ]
+                },
+                "description": "TC_PROP_013. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_014 | Public list includes published room (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Published QA room now visible',()=>pm.expect(data.some(r=>r.id===pm.environment.get('roomId'))).to.eql(true));",
+                      "pm.test('Public response excludes internal status',()=>{ const qa=data.find(r=>r.id===pm.environment.get('roomId')); pm.expect(qa).to.be.an('object'); pm.expect(qa).not.to.have.property('published'); });",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_014. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_015 | Public detail visible (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Public room ID matches',()=>pm.expect(data.id).to.eql(pm.environment.get('roomId')));",
+                      "pm.test('Public property name present',()=>pm.expect(data.propertyName).to.eql('QA - Property '+pm.environment.get('qaRunSuffix')));",
+                      "pm.test('Public rent reflects update',()=>pm.expect(data.monthlyRent).to.eql(2800000));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_015. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_016 | Unpublish room (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Room now hidden',()=>pm.expect(data.published).to.eql(false));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}",
+                    "publication"
+                  ]
+                },
+                "description": "TC_PROP_016. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_017 | Public list hides unpublished room (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('QA room not public any more',()=>pm.expect(data.some(r=>r.id===pm.environment.get('roomId'))).to.eql(false));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_017. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_018 | Public detail hidden again (404)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_018. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_019 | Publish body null returns 400",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": null\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}",
+                    "publication"
+                  ]
+                },
+                "description": "TC_PROP_019. Expected HTTP 400; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_020 | Publish unknown room returns 404",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{unknownId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{unknownId}}",
+                    "publication"
+                  ]
+                },
+                "description": "TC_PROP_020. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_021 | Public detail unknown UUID returns 404",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms/{{unknownId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms",
+                    "{{unknownId}}"
+                  ]
+                },
+                "description": "TC_PROP_021. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            }
+          ],
+          "description": "Verifies public filtering before/after publication, public DTO and negative PATCH requests."
+        },
+        {
+          "name": "04 - Validation / Regression (OWNER)",
+          "item": [
+            {
+              "name": "TC_PROP_022 | Missing propertyId => 400",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_022. Expected HTTP 400; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_023 | Rooms of unknown property => 404",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms?propertyId={{unknownId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ],
+                  "query": [
+                    {
+                      "key": "propertyId",
+                      "value": "{{unknownId}}"
+                    }
+                  ]
+                },
+                "description": "TC_PROP_023. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_024 | Unknown room detail => 404",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{unknownId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{unknownId}}"
+                  ]
+                },
+                "description": "TC_PROP_024. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_025 | Blank room code => 400",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"code\": \"  \",\n  \"title\": \"Phòng QA ban đầu\",\n  \"description\": \"Room created for automated test\",\n  \"floorNumber\": 1,\n  \"areaM2\": 25.5,\n  \"monthlyRent\": 2500000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_025. Expected HTTP 400; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_026 | Negative monthly rent => 400",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"code\": \"QA-NEG-{{qaRunSuffix}}\",\n  \"title\": \"Phòng QA ban đầu\",\n  \"description\": \"Room created for automated test\",\n  \"floorNumber\": 1,\n  \"areaM2\": 25.5,\n  \"monthlyRent\": -1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_026. Expected HTTP 400; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_027 | Unknown property at create room => 404",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"propertyId\": \"{{unknownId}}\",\n  \"code\": \"QA-NONEXIST-{{qaRunSuffix}}\",\n  \"title\": \"Phòng QA ban đầu\",\n  \"description\": \"Room created for automated test\",\n  \"floorNumber\": 1,\n  \"areaM2\": 25.5,\n  \"monthlyRent\": 2500000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_027. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_028 | Invalid update title => 400",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"{{roomCode}}\",\n  \"title\": \"  \",\n  \"description\": \"Updated by Postman regression\",\n  \"floorNumber\": 2,\n  \"areaM2\": 27.5,\n  \"monthlyRent\": 2800000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_028. Expected HTTP 400; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_029 | Update unknown room => 404",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"{{roomCode}}\",\n  \"title\": \"Phòng QA đã cập nhật\",\n  \"description\": \"Updated by Postman regression\",\n  \"floorNumber\": 2,\n  \"areaM2\": 27.5,\n  \"monthlyRent\": 2800000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{unknownId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{unknownId}}"
+                  ]
+                },
+                "description": "TC_PROP_029. Expected HTTP 404; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_030 | Room unchanged after failed update (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "const data=pm.response.json();",
+                      "pm.test('Valid title remains unchanged',()=>pm.expect(data.title).to.eql('Phòng QA đã cập nhật'));",
+                      "pm.test('Rent still 2800000',()=>pm.expect(data.monthlyRent).to.eql(2800000));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{ownerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}"
+                  ]
+                },
+                "description": "TC_PROP_030. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            }
+          ],
+          "description": "Deliberate 400/404 responses with OWNER token; validates rejects and no unwanted updates."
+        },
+        {
+          "name": "05 - Authentication boundaries",
+          "item": [
+            {
+              "name": "TC_PROP_031 | No Bearer: list properties => 401",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties"
+                  ]
+                },
+                "description": "TC_PROP_031. Expected HTTP 401; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_032 | No Bearer: create room => 401",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"code\": \"{{roomCode}}\",\n  \"title\": \"Phòng QA ban đầu\",\n  \"description\": \"Room created for automated test\",\n  \"floorNumber\": 1,\n  \"areaM2\": 25.5,\n  \"monthlyRent\": 2500000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_032. Expected HTTP 401; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_033 | Invalid Bearer JWT => 401",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "not.a.real.jwt",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms?propertyId={{propertyId}}",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms"
+                  ],
+                  "query": [
+                    {
+                      "key": "propertyId",
+                      "value": "{{propertyId}}"
+                    }
+                  ]
+                },
+                "description": "TC_PROP_033. Expected HTTP 401; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_034 | No Bearer: room publish => 401",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 401', function () { pm.response.to.have.status(401); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}",
+                    "publication"
+                  ]
+                },
+                "description": "TC_PROP_034. Expected HTTP 401; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_035 | GUEST public listing still allowed (200)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                      "if (pm.response.code === 200) {",
+                      "pm.test('Public response is array',()=>pm.expect(pm.response.json()).to.be.an('array'));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/public/rooms",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "public",
+                    "rooms"
+                  ]
+                },
+                "description": "TC_PROP_035. Expected HTTP 200; execute within ordered collection."
+              },
+              "response": []
+            }
+          ],
+          "description": "Always run. Invalid tokens require running Auth introspection and matching service key."
+        },
+        {
+          "name": "06 - STAFF role restrictions",
+          "item": [
+            {
+              "name": "TC_PROP_036 | STAFF cannot list managed properties (403)",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!(pm.environment.get('staffToken') || '').trim()) {",
+                      "    pm.execution.skipRequest();",
+                      "}"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties"
+                  ]
+                },
+                "description": "TC_PROP_036. Optional STAFF role check. Skips unless staffToken set in environment. STAFF is intentionally denied until assignment-scoped access exists."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_037 | STAFF cannot change publication (403)",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (!(pm.environment.get('staffToken') || '').trim()) {",
+                      "    pm.execution.skipRequest();",
+                      "}"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('HTTP 403', function () { pm.response.to.have.status(403); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{staffToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}",
+                    "publication"
+                  ]
+                },
+                "description": "TC_PROP_037. Expected HTTP 403; execute within ordered collection."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_039 | CUSTOMER forbidden listing properties (403)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Valid CUSTOMER token is forbidden (403)', function () { pm.response.to.have.status(403); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/properties",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "properties"
+                  ]
+                },
+                "description": "Requires valid CUSTOMER token created by existing TC_AUTH_010. Property API is currently OWNER only."
+              },
+              "response": []
+            },
+            {
+              "name": "TC_PROP_040 | CUSTOMER forbidden publishing room (403)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Valid CUSTOMER token is forbidden (403)', function () { pm.response.to.have.status(403); });"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"published\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}/publication",
+                  "host": [
+                    "{{propertyBaseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "rooms",
+                    "{{roomId}}",
+                    "publication"
+                  ]
+                },
+                "description": "Requires valid CUSTOMER token created by existing TC_AUTH_010. Property API is currently OWNER only."
+              },
+              "response": []
+            }
+          ],
+          "description": "When staffToken / internalServiceKey is empty, affected requests are SKIPPED (not silently counted as passed)."
+        }
+      ],
+      "description": "Run after Auth groups 01-04 and before Auth 05-08. Uses ownerToken, staffToken, customerToken from the unchanged Auth testcase chain. The first property create request generates unique QA fixture IDs. Property auth must be configured with the same AUTH_INTERNAL_SERVICE_KEY as Auth."
+    },
+    {
       "name": "05 - OWNER: role management",
       "item": [
         {
@@ -2769,6 +4765,159 @@
         }
       ],
       "description": "Password rotation and token revocation are checked only at Auth Service."
+    },
+    {
+      "name": "07B - PROPERTY | JWT revocation through Auth introspection",
+      "item": [
+        {
+          "name": "TC_INTEGRATION_001 | JWT revoked by password change rejected in Property (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!(pm.environment.get('customerToken') || '').trim()) throw new Error('customerToken missing: run the original Auth test cases in order before this test.');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('TC_INTEGRATION_001: revoked JWT returns 401 at Property', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ]
+            },
+            "description": "Cross-service regression after Auth TC_AUTH_049/050. Auth revokes the original JWT; Property must introspect and return 401 (not 403/200)."
+          },
+          "response": []
+        },
+        {
+          "name": "TC_INTEGRATION_002 | JWT revoked by role change rejected in Property (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!(pm.environment.get('promotedToken') || '').trim()) throw new Error('promotedToken missing: run the original Auth test cases in order before this test.');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('TC_INTEGRATION_002: revoked JWT returns 401 at Property', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{promotedToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ]
+            },
+            "description": "Cross-service regression after Auth TC_AUTH_035/036. Auth revokes the original JWT; Property must introspect and return 401 (not 403/200)."
+          },
+          "response": []
+        },
+        {
+          "name": "TC_INTEGRATION_003 | JWT revoked by logout rejected in Property (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!(pm.environment.get('postChangeToken') || '').trim()) throw new Error('postChangeToken missing: run the original Auth test cases in order before this test.');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('TC_INTEGRATION_003: revoked JWT returns 401 at Property', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{postChangeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ]
+            },
+            "description": "Cross-service regression after Auth TC_AUTH_053/054. Auth revokes the original JWT; Property must introspect and return 401 (not 403/200)."
+          },
+          "response": []
+        }
+      ],
+      "description": "These three cases reuse the existing Auth tests for token_version changes, password changes and logout. Run after Auth 07, with no new login."
     },
     {
       "name": "08 - Forgot/reset negative cases (automatic)",
