@@ -1,0 +1,21 @@
+# Local development only. Bind management and AMQP ports to localhost.
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rental-notification-rabbitmq
+    hostname: rental-notification-rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:?Set RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:?Set RABBIT_PASSWORD}
+    volumes:
+      - notification_rabbit_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+volumes:
+  notification_rabbit_data:
