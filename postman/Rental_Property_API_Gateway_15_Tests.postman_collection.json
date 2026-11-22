@@ -1,0 +1,731 @@
+{
+  "info": {
+    "name": "Rental Property - API Gateway Integration (15 Tests)",
+    "description": "15 ordered Postman requests for API Gateway port 8080 -> Auth Service port 8081. Requires Eureka, Auth, Gateway running and local/test DB. Uses customerPassword from selected environment; registers a new CUSTOMER each run. Manual outage/service-key tests are documented separately. Do NOT run with production DB. No secrets embedded.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "GW_01 | Gateway health -> 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "actuator",
+            "health"
+          ]
+        },
+        "description": "GW_01 | Gateway health -> 200",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Health is UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_02 | Public login wrong credentials -> 401",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Public endpoint must reach Auth even when credentials are wrong; response comes from Auth.",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"gw_missing_user_123456789\", \"password\": \"DeliberatelyWrong_123\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+              "pm.test(\"Auth returns INVALID_CREDENTIALS\", () => pm.expect(pm.response.json().code).to.eql(\"INVALID_CREDENTIALS\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_03 | Register invalid payload -> 400",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "description": "GW_03 | Register invalid payload -> 400",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"a\", \"password\": \"GatewayTest@12345\", \"fullName\": \"Gateway Invalid\", \"email\": \"invalid-email\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_04 | Register unique CUSTOMER -> 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "description": "Creates a unique test CUSTOMER on local/test database; must run whole collection in order.",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{gwTestUsername}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"fullName\": \"Gateway Integration Test\",\n  \"email\": \"{{gwTestEmail}}\",\n  \"phone\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const password = pm.environment.get(\"customerPassword\");",
+              "if (!password) { throw new Error(\"Set customerPassword in the selected Postman environment before running\"); }",
+              "const runId = Date.now().toString(36) + Math.floor(Math.random() * 100000).toString(36);",
+              "pm.collectionVariables.set(\"gwTestUsername\", \"gwtest_\" + runId);",
+              "pm.collectionVariables.set(\"gwTestEmail\", \"gwtest_\" + runId + \"@example.invalid\");",
+              "pm.collectionVariables.unset(\"gwTestToken\");",
+              "pm.collectionVariables.unset(\"gwTamperedToken\");"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Created user has CUSTOMER role\", () => {",
+              "  const data = pm.response.json();",
+              "  pm.expect(data.role).to.eql(\"CUSTOMER\");",
+              "  pm.expect(data.username).to.eql(pm.collectionVariables.get(\"gwTestUsername\"));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_05 | Duplicate CUSTOMER registration -> 409",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "description": "GW_05 | Duplicate CUSTOMER registration -> 409",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{gwTestUsername}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"fullName\": \"Gateway Integration Test\",\n  \"email\": \"{{gwTestEmail}}\",\n  \"phone\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_06 | Login new CUSTOMER -> 200 + JWT",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "GW_06 | Login new CUSTOMER -> 200 + JWT",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{gwTestUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT returned and CUSTOMER role preserved\", () => {",
+              "  const data = pm.response.json();",
+              "  pm.expect(data.accessToken).to.be.a(\"string\").and.not.empty;",
+              "  pm.expect(data.role).to.eql(\"CUSTOMER\");",
+              "  pm.collectionVariables.set(\"gwTestToken\", data.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_07 | GET /api/users/me valid JWT -> 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "description": "GW_07 | GET /api/users/me valid JWT -> 200",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTestToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Profile matches newly registered user\", () => {",
+              "  pm.expect(pm.response.json().username).to.eql(pm.collectionVariables.get(\"gwTestUsername\"));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_08 | GET /api/users/me missing JWT -> 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "description": "GW_08 | GET /api/users/me missing JWT -> 401",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_09 | GET /api/users/me fabricated JWT -> 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "description": "GW_09 | GET /api/users/me fabricated JWT -> 401",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "abc.def.ghi",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_10 | Tampered signature -> 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "description": "GW_10 | Tampered signature -> 401",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTamperedToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const jwt = pm.collectionVariables.get(\"gwTestToken\");",
+              "if (!jwt || jwt.split(\".\").length !== 3) { throw new Error(\"GW_06 must run successfully first\"); }",
+              "const segments = jwt.split(\".\");",
+              "segments[2] = (segments[2][0] === \"A\" ? \"B\" : \"A\") + segments[2].slice(1);",
+              "pm.collectionVariables.set(\"gwTamperedToken\", segments.join(\".\"));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_11 | CUSTOMER blocked from OWNER users list -> 403",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users"
+          ]
+        },
+        "description": "GW_11 | CUSTOMER blocked from OWNER users list -> 403",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTestToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_12 | Client spoofed OWNER headers still -> 403",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Role",
+            "value": "OWNER",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "00000000-0000-0000-0000-000000000001",
+            "type": "text"
+          },
+          {
+            "key": "X-Username",
+            "value": "owner",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users"
+          ]
+        },
+        "description": "Client-provided internal identity headers must not elevate a CUSTOMER to OWNER.",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTestToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_13 | Internal introspection denied via Gateway -> 403",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/internal/auth/introspect",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "internal",
+            "auth",
+            "introspect"
+          ]
+        },
+        "description": "Valid customer bearer is provided to distinguish denyAll 403 from unauthenticated 401. No real service key is transmitted.",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTestToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"token\": \"not-a-token\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_14 | Logout authenticated CUSTOMER -> 200",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "logout"
+          ]
+        },
+        "description": "GW_14 | Logout authenticated CUSTOMER -> 200",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTestToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GW_15 | JWT revoked by logout -> 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "description": "Must run after GW_14. It verifies Auth token_version revocation is enforced by Gateway introspection.",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{gwTestToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+              "// Keep the local test account, but remove JWT artifacts from the collection.",
+              "pm.collectionVariables.unset(\"gwTestToken\");",
+              "pm.collectionVariables.unset(\"gwTamperedToken\");"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "gwTestUsername",
+      "value": ""
+    },
+    {
+      "key": "gwTestEmail",
+      "value": ""
+    },
+    {
+      "key": "gwTestToken",
+      "value": ""
+    },
+    {
+      "key": "gwTamperedToken",
+      "value": ""
+    }
+  ]
+}
