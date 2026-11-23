@@ -105,3 +105,54 @@ trước khi chạy Flyway trên database mới.
 - Thay đổi tiếp theo dùng V2, V3... theo thứ tự.
 - Giữ clean-disabled=true và validate-on-migrate=true.
 - Dùng database rỗng riêng để kiểm thử migration.
+
+
+## Kiểm thử đồng thời trên MySQL
+
+Ghi chỉ số được tuần tự hóa theo (room_id, utility_type) bằng khóa InnoDB
+trong cùng transaction, kể cả khi chưa có chỉ số đầu tiên.
+Transaction ghi dùng READ_COMMITTED để đọc lại dữ liệu đã commit sau khi chờ khóa.
+Khóa được giải phóng khi commit hoặc rollback; điện và nước có khóa riêng.
+V2 tạo utility_meter_write_locks. Giữ nguyên V1 đã áp dụng.
+
+### Chạy integration test
+
+1. Tạo database MySQL 8.0.16+ rỗng riêng, tên bắt đầu bằng rental_billing_it_, ví dụ:
+
+       CREATE DATABASE rental_billing_it_20261123
+       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+2. Đặt biến môi trường trong cấu hình Maven kiểm thử:
+
+   - BILLING_IT_DB_URL: jdbc:mysql://localhost:3306/rental_billing_it_20261123?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
+   - MYSQL_USER: tài khoản MySQL có quyền tạo/sửa bảng trong database test.
+   - MYSQL_PASSWORD: mật khẩu MySQL, chỉ đặt ở môi trường local.
+
+3. Tại module billing-service, chạy Goals:
+
+       clean verify -Pmysql-it
+
+   Hoặc từ thư mục gốc repository:
+
+       mvn -f billing-service/pom.xml clean verify -Pmysql-it
+
+Profile chạy 33 test hiện có qua Surefire và 8 integration test qua Failsafe.
+Chỉ ghi nhận PASS sau khi cả hai nhóm đạt và Maven trả BUILD SUCCESS.
+Chạy clean verify mà không có -Pmysql-it chưa xác nhận nhóm MySQL.
+
+### Phạm vi 8 integration test
+
+- Hai kỳ khác nhau: chờ transaction trước commit, từ chối chỉ số đầu kỳ cũ.
+- Hai kỳ liên tục hợp lệ: đọc chỉ số vừa commit và lưu thành công.
+- Công tơ chưa có dữ liệu vẫn được tuần tự hóa.
+- Trùng kỳ trả 409 sau khi transaction trước hoàn tất.
+- Rollback giải phóng khóa và không giữ lại bản ghi đầu tiên.
+- Nước không bị khóa bởi transaction ghi điện cùng phòng.
+- Hai yêu cầu tạo hóa đơn trùng: một thành công, một 409, chỉ lưu một hóa đơn.
+- Lỗi CHECK thật trên MySQL khi lưu dòng hóa đơn rollback toàn bộ hóa đơn.
+
+Test dùng database local riêng có tên rental_billing_it_...; guard kiểm tra trước
+khi Flyway khởi chạy. Dữ liệu fixture dùng UUID riêng và được dọn theo fixture.
+Test rollback tạo rồi xóa một CHECK tạm trong database test.
+Auth HTTP được kiểm tra riêng trong BillingAuthSecurityTest; nhóm MySQL gọi
+service với Authentication OWNER của fixture, không gọi Auth hoặc sửa auth_db.

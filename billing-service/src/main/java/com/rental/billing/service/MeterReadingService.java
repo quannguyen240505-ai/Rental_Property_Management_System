@@ -8,11 +8,13 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.dao.DataIntegrityViolationException;
 import com.rental.billing.dto.MeterReadingResponse;
 import com.rental.billing.repository.UtilityReadingRepository;
+import com.rental.billing.repository.UtilityMeterLockRepository;
 import com.rental.billing.dto.MeterReadingRequest;
 import com.rental.billing.entity.UtilityReading;
 
@@ -20,9 +22,13 @@ import com.rental.billing.entity.UtilityReading;
 public class MeterReadingService {
 
     private final UtilityReadingRepository repository;
+    private final UtilityMeterLockRepository meterLocks;
 
-    public MeterReadingService(UtilityReadingRepository repository) {
+    public MeterReadingService(
+            UtilityReadingRepository repository,
+            UtilityMeterLockRepository meterLocks) {
         this.repository = repository;
+        this.meterLocks = meterLocks;
     }
 
     @Transactional(readOnly = true)
@@ -41,7 +47,7 @@ public class MeterReadingService {
                 .map(MeterReadingResponse::fromEntity)
                 .toList();
     }
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public MeterReadingResponse create(
             MeterReadingRequest request,
             Authentication authentication) {
@@ -58,6 +64,10 @@ public class MeterReadingService {
                     HttpStatus.UNAUTHORIZED,
                     "Token phải có sub là UUID người dùng");
         }
+
+        // Serialize all periods, including the first reading of a meter.
+        // The lock is held by the same transaction until commit/rollback.
+        meterLocks.acquire(request.roomId(), request.utilityType());
 
         boolean duplicate =
                 repository.existsByRoomIdAndBillingPeriodAndUtilityType(

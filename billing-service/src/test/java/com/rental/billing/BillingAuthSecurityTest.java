@@ -12,6 +12,7 @@ import com.sun.net.httpserver.HttpServer;
 import com.rental.billing.config.SecurityConfig;
 import com.rental.billing.controller.MeterReadingController;
 import com.rental.billing.repository.UtilityReadingRepository;
+import com.rental.billing.repository.UtilityMeterLockRepository;
 import com.rental.billing.service.MeterReadingService;
 
 import org.junit.jupiter.api.AfterEach;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.mock.web.MockServletContext;
@@ -48,6 +49,7 @@ class BillingAuthSecurityTest {
     private AnnotationConfigWebApplicationContext context;
     private MockMvc mvc;
     private UtilityReadingRepository repository;
+    private UtilityMeterLockRepository meterLocks;
 
     private volatile CountDownLatch authResponseGate;
     private int authStatus;
@@ -111,6 +113,7 @@ class BillingAuthSecurityTest {
         context.refresh();
 
         repository = context.getBean(UtilityReadingRepository.class);
+        meterLocks = context.getBean(UtilityMeterLockRepository.class);
         mvc = MockMvcBuilders.webAppContextSetup(context)
                 .addFilters(context.getBean(FilterChainProxy.class))
                 .build();
@@ -135,13 +138,13 @@ class BillingAuthSecurityTest {
                 .andExpect(status().isUnauthorized());
 
         assertEquals(0, authCalls);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
     void inactiveTokenReturns401BeforeAnyWrite() throws Exception {
         postReading(401);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -150,7 +153,7 @@ class BillingAuthSecurityTest {
         authBody = "{\"code\":\"INVALID_SERVICE_KEY\"}";
 
         postReading(503);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -158,7 +161,7 @@ class BillingAuthSecurityTest {
         authStatus = 500;
 
         postReading(503);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -168,7 +171,7 @@ class BillingAuthSecurityTest {
         authServer = null;
 
         postReading(503);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -176,7 +179,7 @@ class BillingAuthSecurityTest {
         authBody = "not-json";
 
         postReading(503);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -185,7 +188,7 @@ class BillingAuthSecurityTest {
         authBody = "{\"active\":true}";
 
         postReading(503);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -193,7 +196,7 @@ class BillingAuthSecurityTest {
         activeUser("STAFF");
 
         postReading(403);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -227,7 +230,7 @@ class BillingAuthSecurityTest {
         activeUser("CUSTOMER");
 
         postReading(403);
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, meterLocks);
     }
 
     @Test
@@ -241,7 +244,7 @@ class BillingAuthSecurityTest {
             postReading(503);
 
             assertEquals(1, authCalls);
-            verifyNoInteractions(repository);
+            verifyNoInteractions(repository, meterLocks);
         } finally {
             gate.countDown();
         }
@@ -278,7 +281,7 @@ class BillingAuthSecurityTest {
                 .andExpect(status().is(expectedStatus));
     }
 
-    @Configuration
+    @TestConfiguration
     @EnableWebSecurity
     @EnableWebMvc
     @Import(SecurityConfig.class)
@@ -290,8 +293,15 @@ class BillingAuthSecurityTest {
         }
 
         @Bean
-        MeterReadingService service(UtilityReadingRepository repository) {
-            return new MeterReadingService(repository);
+        UtilityMeterLockRepository meterLocks() {
+            return mock(UtilityMeterLockRepository.class);
+        }
+
+        @Bean
+        MeterReadingService service(
+                UtilityReadingRepository repository,
+                UtilityMeterLockRepository meterLocks) {
+            return new MeterReadingService(repository, meterLocks);
         }
 
         @Bean
