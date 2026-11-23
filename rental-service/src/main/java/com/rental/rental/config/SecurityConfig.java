@@ -67,6 +67,11 @@ public class SecurityConfig {
                                 "/api/contracts/*/activate"
                         ).hasRole("OWNER")
 
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/contracts/*/checkout"
+                        ).hasRole("OWNER")
+
                         .anyRequest().denyAll()
                 )
 

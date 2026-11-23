@@ -6,6 +6,7 @@ import com.rental.rental.entity.RentalContract;
 import com.rental.rental.security.AuthIntrospectionClient;
 import com.rental.rental.security.BearerTokenFilter;
 import com.rental.rental.service.ContractActivationService;
+import com.rental.rental.service.CheckoutSettlementService;
 import com.rental.rental.service.ContractDepositService;
 import com.rental.rental.service.RentalContractService;
 
@@ -42,6 +43,9 @@ class RentalContractControllerSecurityTest {
 
     @MockitoBean
     private AuthIntrospectionClient authClient;
+
+    @MockitoBean
+    private CheckoutSettlementService checkoutService;
 
     private final UUID contractId = UUID.randomUUID();
 

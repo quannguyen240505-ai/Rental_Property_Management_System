@@ -7,6 +7,9 @@ import com.rental.rental.dto.DepositSummaryResponse;
 import com.rental.rental.service.ContractDepositService;
 import com.rental.rental.entity.RentalContract;
 import com.rental.rental.service.ContractActivationService;
+import com.rental.rental.service.CheckoutSettlementService;
+import com.rental.rental.dto.CheckoutRequest;
+import com.rental.rental.dto.CheckoutSettlementResponse;
 
 import jakarta.validation.Valid;
 
@@ -24,15 +27,18 @@ public class RentalContractController {
     private final RentalContractService contractService;
     private final ContractDepositService depositService;
     private final ContractActivationService activationService;
+    private final CheckoutSettlementService checkoutService;
 
     public RentalContractController(
             RentalContractService contractService,
             ContractDepositService depositService,
-            ContractActivationService activationService
+            ContractActivationService activationService,
+            CheckoutSettlementService checkoutService
     ) {
         this.contractService = contractService;
         this.depositService = depositService;
         this.activationService = activationService;
+        this.checkoutService = checkoutService;
     }
 
     @PostMapping
@@ -83,4 +89,16 @@ public class RentalContractController {
 
         return ResponseEntity.ok(response);
     }
+    @PostMapping("/{id}/checkout")
+    public ResponseEntity<CheckoutSettlementResponse> checkout(
+            @PathVariable UUID id,
+            @Valid @RequestBody CheckoutRequest request) {
+        return ResponseEntity.ok(checkoutService.checkout(id, request));
+    }
+
+    @GetMapping("/{id}/settlement")
+    public ResponseEntity<CheckoutSettlementResponse> getSettlement(@PathVariable UUID id) {
+        return ResponseEntity.ok(checkoutService.getByContractId(id));
+    }
 }
+
