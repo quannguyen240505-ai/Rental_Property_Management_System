@@ -3,6 +3,8 @@ package com.rental.rental.controller;
 import com.rental.rental.dto.CreateRentalContractRequest;
 import com.rental.rental.dto.RentalContractResponse;
 import com.rental.rental.service.RentalContractService;
+import com.rental.rental.dto.DepositSummaryResponse;
+import com.rental.rental.service.ContractDepositService;
 
 import jakarta.validation.Valid;
 
@@ -14,14 +16,16 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/rental-contracts")
+@RequestMapping("/api/contracts")
 public class RentalContractController {
 
     private final RentalContractService contractService;
+    private final ContractDepositService depositService;
 
     public RentalContractController(
-            RentalContractService contractService) {
+            RentalContractService contractService, ContractDepositService depositService) {
         this.contractService = contractService;
+        this.depositService = depositService;
     }
 
     @PostMapping
@@ -51,4 +55,15 @@ public class RentalContractController {
 
         return ResponseEntity.ok(responses);
     }
+
+    @GetMapping("/{id}/deposit-summary")
+    public ResponseEntity<DepositSummaryResponse> getDepositSummary(
+            @PathVariable UUID id
+    ) {
+        DepositSummaryResponse response =
+                depositService.getDepositSummary(id);
+
+        return ResponseEntity.ok(response);
+    }
+
 }

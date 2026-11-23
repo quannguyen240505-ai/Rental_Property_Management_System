@@ -5,6 +5,7 @@ import com.rental.rental.dto.RentalContractResponse;
 import com.rental.rental.entity.ContractStatus;
 import com.rental.rental.entity.RentalContract;
 import com.rental.rental.entity.TenantProfile;
+import com.rental.rental.exception.ContractConflictException;
 import com.rental.rental.repository.RentalContractRepository;
 import com.rental.rental.repository.TenantProfileRepository;
 import com.rental.rental.exception.ResourceNotFoundException;
@@ -42,6 +43,19 @@ public class RentalContractService {
                 .findById(request.tenantProfileId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Tenant profile not found"));
+
+        boolean hasOverlap = contractRepository.existsOverlappingContract(
+                request.roomId(),
+                request.startDate(),
+                request.endDate(),
+                List.of(ContractStatus.ACTIVE)
+        );
+
+        if (hasOverlap) {
+            throw new ContractConflictException(
+                    "Room already has an active contract in this period"
+            );
+        }
 
         RentalContract contract = new RentalContract();
 
