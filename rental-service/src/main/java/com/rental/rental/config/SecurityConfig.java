@@ -61,13 +61,19 @@ public class SecurityConfig {
                                 "/api/contracts"
                         ).hasRole("OWNER")
 
-                        // Chi tiết hợp đồng: OWNER hoặc STAFF
+// Chi tiết hợp đồng: OWNER hoặc STAFF
                         .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/contracts/**"
+                                 HttpMethod.GET,
+                                 "/api/contracts/**"
                         ).hasAnyRole("OWNER", "STAFF")
 
-                        // Các API khác mặc định bị từ chối
+// Kích hoạt hợp đồng: chỉ OWNER
+                        .requestMatchers(
+                                 HttpMethod.POST,
+                                 "/api/contracts/*/activate"
+                        ).hasRole("OWNER")
+
+// Các API khác mặc định bị từ chối (feat(rental): implement safe contract activation with concurrency tests)
                         .anyRequest().denyAll()
                 )
 

@@ -1,8 +1,11 @@
 package com.rental.rental.controller;
 
 import com.rental.rental.config.SecurityConfig;
+import com.rental.rental.dto.RentalContractResponse;
+import com.rental.rental.entity.RentalContract;
 import com.rental.rental.security.AuthIntrospectionClient;
 import com.rental.rental.security.BearerTokenFilter;
+import com.rental.rental.service.ContractActivationService;
 import com.rental.rental.service.ContractDepositService;
 import com.rental.rental.service.RentalContractService;
 
@@ -37,6 +40,11 @@ class RentalContractControllerSecurityTest {
 
     @MockitoBean
     private ContractDepositService depositService;
+
+    @MockitoBean
+    private ContractActivationService activationService;
+
+    private final UUID contractId = UUID.randomUUID();
 
     private void mockRole(String token, String role) {
         when(authClient.introspect(token))
@@ -124,5 +132,67 @@ class RentalContractControllerSecurityTest {
                 .andExpect(status().isBadRequest());
 
         verify(contractService, never()).createDraft(any());
+    }
+
+    @Test
+    void activate_withoutToken_returns401() throws Exception {
+
+        mvc.perform(
+                        post("/api/contracts/{id}/activate", contractId)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(activationService);
+    }
+
+    @Test
+    void activate_staff_returns403() throws Exception {
+
+        mockRole("test-token", "STAFF");
+
+        mvc.perform(
+                        post("/api/contracts/{id}/activate", contractId)
+                                .header("Authorization", "Bearer test-token")
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(activationService);
+    }
+
+    @Test
+    void activate_owner_returns200() throws Exception {
+
+        mockRole("test-token", "OWNER");
+
+        RentalContract contract = mock(RentalContract.class);
+        when(contract.getId()).thenReturn(contractId);
+
+        RentalContractResponse response =
+                new RentalContractResponse(
+                        contractId,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "ACTIVE",
+                        java.time.LocalDate.of(2026, 12, 1),
+                        java.time.LocalDate.of(2027, 1, 1),
+                        5_000_000L,
+                        1_000_000L
+                );
+
+        when(activationService.activate(contractId))
+                .thenReturn(contract);
+
+        when(contractService.getById(contractId))
+                .thenReturn(response);
+
+        mvc.perform(
+                        post("/api/contracts/{id}/activate", contractId)
+                                .header("Authorization", "Bearer test-token")
+                                .contentType(MediaType.APPLICATION_JSON)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        verify(activationService).activate(contractId);
     }
 }
