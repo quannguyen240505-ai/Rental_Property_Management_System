@@ -73,7 +73,13 @@ public class SecurityConfig {
                                  "/api/contracts/*/activate"
                         ).hasRole("OWNER")
 
-// Các API khác mặc định bị từ chối (feat(rental): implement safe contract activation with concurrency tests)
+// Checkout và quyết toán tiền cọc: chỉ OWNER
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/contracts/*/checkout"
+                                ).hasRole("OWNER")
+
+// Các API khác mặc định bị từ chối (feat(rental): implement checkout and deposit settlement)
                         .anyRequest().denyAll()
                 )
 
