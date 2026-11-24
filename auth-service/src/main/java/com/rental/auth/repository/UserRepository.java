@@ -9,16 +9,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<AppUser, UUID> {
-
-	Optional<AppUser> findByUsernameIgnoreCase(String username);
-
-	Optional<AppUser> findByEmailIgnoreCase(String email);
-
-	boolean existsByUsernameIgnoreCase(String username);
-
-	boolean existsByEmailIgnoreCase(String email);
-
-	List<AppUser> findAllByRole(Role role);
-
-	long countByRole(Role role);
+    Optional<AppUser> findByUsernameIgnoreCase(String username);
+    Optional<AppUser> findByEmailIgnoreCase(String email);
+    Optional<AppUser> findByGoogleSub(String googleSub);
+    boolean existsByUsernameIgnoreCase(String username);
+    boolean existsByEmailIgnoreCase(String email);
+    List<AppUser> findAllByRole(Role role);
+    long countByRole(Role role);
 }
