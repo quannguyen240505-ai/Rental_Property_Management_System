@@ -1,0 +1,885 @@
+{
+  "info": {
+    "_postman_id": "85ba75d8-b2d9-428d-9130-c4341dbf6499",
+    "name": "Billing PR5 - Final API checks",
+    "description": "Kiểm tra HTTP trên Billing 8087 và Auth 8081 tại localhost sau cập nhật PR #5.\nChọn environment Billing PR5 Local, dán accessToken OWNER mới vào owner_token, Run toàn bộ 21 request, 1 iteration.\nCollection tạo một CUSTOMER fixture và dữ liệu Billing dùng UUID mới. Cuối run logout OWNER để kiểm tra thu hồi token.\nCác token/ID runtime chỉ lưu ở local scope của lượt chạy. Không nhập JWT_SECRET hoặc X-Service-Key.\nĐây là kiểm thử HTTP tuần tự; 8 integration test MySQL kiểm tra đồng thời và rollback thật đã chạy riêng.\nProperty/Room/Contract dùng UUID fixture theo phạm vi OWNER-only hiện tại; chưa xác minh liên service.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 Billing health + khởi tạo fixture",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/actuator/health",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const billing = String(pm.environment.get(\"billing_url\") || \"\").trim().replace(/\\/$/, \"\");",
+              "const auth = String(pm.environment.get(\"auth_url\") || \"\").trim().replace(/\\/$/, \"\");",
+              "if (!/^http:\\/\\/(localhost|127\\.0\\.0\\.1):8087$/.test(billing) ||",
+              "    !/^http:\\/\\/(localhost|127\\.0\\.0\\.1):8081$/.test(auth)) {",
+              "    throw new Error(\"Chon environment Billing PR5 Local: Billing 8087, Auth 8081 tren localhost.\");",
+              "}",
+              "let token = String(pm.environment.get(\"owner_token\") || \"\").trim().replace(/^Bearer\\s+/i, \"\");",
+              "if (!/^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(token)) {",
+              "    throw new Error(\"Dang nhap OWNER qua Auth, dan accessToken moi vao owner_token truoc khi Run.\");",
+              "}",
+              "pm.variables.set(\"billing_url\", billing);",
+              "pm.variables.set(\"auth_url\", auth);",
+              "pm.variables.set(\"owner_token\", token);",
+              "const now = Date.now();",
+              "const localDate = new Date(now + 7 * 3600000);",
+              "const nextMonth = new Date(Date.UTC(localDate.getUTCFullYear(), localDate.getUTCMonth() + 1, 1));",
+              "pm.variables.set(\"billing_period\", localDate.toISOString().slice(0, 7));",
+              "pm.variables.set(\"next_period\", nextMonth.toISOString().slice(0, 7));",
+              "pm.variables.set(\"due_date\", new Date(now + (14 * 24 + 7) * 3600000).toISOString().slice(0, 10));",
+              "[\"property\", \"room\", \"contract\"].forEach(function (name) {",
+              "    pm.variables.set(\"fixture_\" + name + \"_id\", pm.variables.replaceIn(\"{{$guid}}\"));",
+              "});",
+              "const suffix = String(now) + String(Math.floor(Math.random() * 1000));",
+              "pm.variables.set(\"customer_username\", \"bq_billing_\" + suffix);",
+              "pm.variables.set(\"customer_password\", \"BillingReview2026!\");",
+              "pm.variables.set(\"customer_email\", \"bq_billing_\" + suffix + \"@example.invalid\");",
+              "pm.variables.set(\"customer_phone\", \"09\" + String(now).slice(-8));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Billing UP\", function () { pm.expect(j.status).to.eql(\"UP\"); });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "02 Không token: ghi chỉ số → 401",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 0,\n  \"currentReading\": 100,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "if (pm.response.code !== 401) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "03 Token sai: ghi chỉ số → 401",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "billing-invalid-token",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 0,\n  \"currentReading\": 100,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "if (pm.response.code !== 401) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "04 Tạo CUSTOMER fixture qua Auth → 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{auth_url}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{customer_username}}\",\n  \"password\": \"{{customer_password}}\",\n  \"fullName\": \"Billing Review Customer\",\n  \"email\": \"{{customer_email}}\",\n  \"phone\": \"{{customer_phone}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "if (pm.response.code !== 201) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Tài khoản fixture là CUSTOMER\", function () { pm.expect(j.role).to.eql(\"CUSTOMER\"); });",
+              "    pm.test(\"ID CUSTOMER là UUID\", function () { pm.expect(j.id).to.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/); });",
+              "    if (j.role !== \"CUSTOMER\" || typeof j.id !== \"string\") {",
+              "        pm.execution.setNextRequest(null);",
+              "    } else {",
+              "        pm.variables.set(\"customer_id\", j.id);",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "05 CUSTOMER đăng nhập qua Auth → 200",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{auth_url}}/api/auth/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{customer_username}}\",\n  \"password\": \"{{customer_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"CUSTOMER có accessToken\", function () { pm.expect(j.accessToken).to.be.a(\"string\").and.not.empty; });",
+              "    pm.test(\"Role CUSTOMER đã xác thực\", function () { pm.expect(j.role).to.eql(\"CUSTOMER\"); });",
+              "    pm.test(\"Login đúng CUSTOMER fixture\", function () { pm.expect(j.userId).to.eql(pm.variables.get(\"customer_id\")); });",
+              "    if (j.role !== \"CUSTOMER\" || typeof j.accessToken !== \"string\") {",
+              "        pm.execution.setNextRequest(null);",
+              "    } else {",
+              "        pm.variables.set(\"customer_token\", j.accessToken);",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "06 CUSTOMER không được ghi chỉ số → 403",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customer_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 0,\n  \"currentReading\": 100,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});",
+              "if (pm.response.code !== 403) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "07 OWNER kiểm tra không có dữ liệu ghi trái quyền → 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/api/meter-readings?roomId={{fixture_room_id}}&period={{billing_period}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Không lưu chỉ số từ ba request bị từ chối\", function () { pm.expect(j).to.be.an(\"array\").with.lengthOf(0); });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "08 OWNER tạo chỉ số đầu tiên → 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 0,\n  \"currentReading\": 100,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "if (pm.response.code !== 201) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"ID chỉ số là UUID\", function () { pm.expect(j.id).to.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/); });",
+              "    pm.test(\"Chỉ số lưu đúng phòng/kỳ/giá trị\", function () {",
+              "        pm.expect(j.roomId).to.eql(pm.variables.get(\"fixture_room_id\"));",
+              "        pm.expect(j.billingPeriod).to.eql(pm.variables.get(\"billing_period\"));",
+              "        pm.expect(j.previousReading).to.eql(0);",
+              "        pm.expect(j.currentReading).to.eql(100);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "09 Trùng phòng/kỳ/loại → 409",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 0,\n  \"currentReading\": 100,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "if (pm.response.code !== 409) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "10 Kỳ tiếp theo dùng chỉ số cũ → 400",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{next_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 0,\n  \"currentReading\": 150,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "if (pm.response.code !== 400) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "11 OWNER kiểm tra kỳ bị từ chối chưa được lưu → 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/api/meter-readings?roomId={{fixture_room_id}}&period={{next_period}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Không lưu chỉ số bị sai tính liên tục\", function () { pm.expect(j).to.be.an(\"array\").with.lengthOf(0); });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "12 Kỳ tiếp theo đúng chỉ số liên tục → 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/meter-readings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"billingPeriod\": \"{{next_period}}\",\n  \"utilityType\": \"ELECTRICITY\",\n  \"previousReading\": 100,\n  \"currentReading\": 150,\n  \"meterReplaced\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "if (pm.response.code !== 201) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Lưu đúng kỳ kế tiếp và chỉ số 100 → 150\", function () {",
+              "        pm.expect(j.billingPeriod).to.eql(pm.variables.get(\"next_period\"));",
+              "        pm.expect(j.previousReading).to.eql(100);",
+              "        pm.expect(j.currentReading).to.eql(150);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "13 OWNER tạo hóa đơn DRAFT → 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/invoices",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"contractId\": \"{{fixture_contract_id}}\",\n  \"tenantUserId\": \"{{customer_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"dueDate\": \"{{due_date}}\",\n  \"lines\": [\n    {\n      \"lineType\": \"RENT\",\n      \"description\": \"Tiền thuê fixture\",\n      \"quantity\": 1,\n      \"unitPrice\": 2000000\n    },\n    {\n      \"lineType\": \"ELECTRICITY\",\n      \"description\": \"Tiền điện fixture\",\n      \"quantity\": 50,\n      \"unitPrice\": 3500\n    },\n    {\n      \"lineType\": \"WATER\",\n      \"description\": \"Tiền nước fixture\",\n      \"quantity\": 5,\n      \"unitPrice\": 15000\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "if (pm.response.code !== 201) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"ID hóa đơn là UUID\", function () { pm.expect(j.id).to.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/); });",
+              "    pm.test(\"Hóa đơn mới là DRAFT\", function () { pm.expect(j.status).to.eql(\"DRAFT\"); });",
+              "    pm.test(\"Tổng 2.250.000, chưa thanh toán, đủ 3 dòng\", function () {",
+              "        pm.expect(j.totalAmount).to.eql(2250000);",
+              "        pm.expect(j.paidAmount).to.eql(0);",
+              "        pm.expect(j.outstandingAmount).to.eql(2250000);",
+              "        pm.expect(j.lines).to.be.an(\"array\").with.lengthOf(3);",
+              "    });",
+              "    if (typeof j.id !== \"string\") { pm.execution.setNextRequest(null); }",
+              "    else { pm.variables.set(\"invoice_id\", j.id); }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "14 Trùng hóa đơn hợp đồng/kỳ → 409",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": "{{billing_url}}/api/invoices",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{fixture_property_id}}\",\n  \"roomId\": \"{{fixture_room_id}}\",\n  \"contractId\": \"{{fixture_contract_id}}\",\n  \"tenantUserId\": \"{{customer_id}}\",\n  \"billingPeriod\": \"{{billing_period}}\",\n  \"dueDate\": \"{{due_date}}\",\n  \"lines\": [\n    {\n      \"lineType\": \"RENT\",\n      \"description\": \"Tiền thuê fixture\",\n      \"quantity\": 1,\n      \"unitPrice\": 2000000\n    },\n    {\n      \"lineType\": \"ELECTRICITY\",\n      \"description\": \"Tiền điện fixture\",\n      \"quantity\": 50,\n      \"unitPrice\": 3500\n    },\n    {\n      \"lineType\": \"WATER\",\n      \"description\": \"Tiền nước fixture\",\n      \"quantity\": 5,\n      \"unitPrice\": 15000\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "if (pm.response.code !== 409) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "15 CUSTOMER không được đọc hóa đơn OWNER-only → 403",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/api/invoices/{{invoice_id}}",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customer_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});",
+              "if (pm.response.code !== 403) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "16 OWNER đọc lại hóa đơn DRAFT → 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/api/invoices/{{invoice_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Đúng hóa đơn DRAFT và tổng tiền\", function () {",
+              "        pm.expect(j.id).to.eql(pm.variables.get(\"invoice_id\"));",
+              "        pm.expect(j.status).to.eql(\"DRAFT\");",
+              "        pm.expect(j.totalAmount).to.eql(2250000);",
+              "        pm.expect(j.lines).to.be.an(\"array\").with.lengthOf(3);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "17 OWNER phát hành hóa đơn → 200",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{billing_url}}/api/invoices/{{invoice_id}}/issue"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Hóa đơn ISSUED, có ngày phát hành, giữ tổng tiền\", function () {",
+              "        pm.expect(j.status).to.eql(\"ISSUED\");",
+              "        pm.expect(j.issueDate).to.be.a(\"string\").and.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+              "        pm.expect(j.totalAmount).to.eql(2250000);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "18 Phát hành lại hóa đơn → 409",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{billing_url}}/api/invoices/{{invoice_id}}/issue"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "if (pm.response.code !== 409) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "19 OWNER đọc lại trạng thái ISSUED → 200",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/api/invoices/{{invoice_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Trạng thái ISSUED đã được lưu\", function () {",
+              "        pm.expect(j.id).to.eql(pm.variables.get(\"invoice_id\"));",
+              "        pm.expect(j.status).to.eql(\"ISSUED\");",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "20 OWNER logout qua Auth → 200",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{auth_url}}/api/auth/logout"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "if (pm.response.code !== 200) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "    const j = pm.response.json();",
+              "    pm.test(\"Auth xác nhận logout\", function () { pm.expect(j.message).to.be.a(\"string\").and.not.empty; });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "21 Token OWNER vừa bị thu hồi → Billing trả 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{billing_url}}/api/meter-readings?roomId={{fixture_room_id}}&period={{billing_period}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "if (pm.response.code !== 401) {",
+              "    pm.execution.setNextRequest(null);",
+              "} else {",
+              "",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

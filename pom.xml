@@ -23,6 +23,9 @@
         <module>service-registry</module>
         <module>billing-service</module>
         <module>payment-service</module>
+        <module>auth-service</module>
+        <module>api-gateway</module>
+        <module>notification-service</module>
     </modules>
     <dependencyManagement>
         <dependencies>
