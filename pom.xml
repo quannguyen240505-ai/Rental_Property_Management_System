@@ -24,6 +24,7 @@
         <module>auth-service</module>
         <module>api-gateway</module>
         <module>notification-service</module>
+        <module>billing-service</module>
     </modules>
     <dependencyManagement>
         <dependencies>
