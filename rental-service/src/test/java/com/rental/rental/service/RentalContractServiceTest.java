@@ -128,4 +128,99 @@ class RentalContractServiceTest {
         verify(contractRepository, never())
                 .save(any(RentalContract.class));
     }
+
+    @Test
+    void getAll_emptyList() {
+        when(contractRepository.findAll())
+                .thenReturn(List.of());
+
+        List<RentalContractResponse> result =
+                contractService.getAll();
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+        verify(contractRepository).findAll();
+    }
+
+    @Test
+    void getById_success() {
+        UUID contractId = UUID.randomUUID();
+
+        TenantProfile tenant = new TenantProfile();
+        tenant.setFullName("Nguyen Van A");
+
+        RentalContract contract = new RentalContract();
+        contract.setRoomId(roomId);
+        contract.setTenantProfile(tenant);
+        contract.setStatus(ContractStatus.DRAFT);
+        contract.setStartDate(LocalDate.of(2026, 12, 1));
+        contract.setEndDate(LocalDate.of(2027, 12, 1));
+        contract.setRentAmount(2_000_000L);
+        contract.setDepositRequired(2_000_000L);
+
+        when(contractRepository.findById(contractId))
+                .thenReturn(Optional.of(contract));
+
+        RentalContractResponse result =
+                contractService.getById(contractId);
+
+        assertEquals(roomId, result.roomId());
+        assertEquals("DRAFT", result.status());
+        assertEquals(2_000_000L, result.rentAmount());
+    }
+
+    @Test
+    void getById_notFound() {
+        UUID contractId = UUID.randomUUID();
+
+        when(contractRepository.findById(contractId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> contractService.getById(contractId)
+        );
+    }
+
+    @Test
+    void createDraft_invalidDates() {
+        CreateRentalContractRequest invalidRequest =
+                new CreateRentalContractRequest(
+                        roomId,
+                        tenantId,
+                        LocalDate.of(2027, 12, 1),
+                        LocalDate.of(2026, 12, 1),
+                        2_000_000L,
+                        2_000_000L
+                );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> contractService.createDraft(invalidRequest)
+        );
+
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+
+    @Test
+    void createDraft_sameStartAndEndDate() {
+        CreateRentalContractRequest invalidRequest =
+                new CreateRentalContractRequest(
+                        roomId,
+                        tenantId,
+                        LocalDate.of(2026, 12, 1),
+                        LocalDate.of(2026, 12, 1),
+                        2_000_000L,
+                        2_000_000L
+                );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> contractService.createDraft(invalidRequest)
+        );
+
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
 }

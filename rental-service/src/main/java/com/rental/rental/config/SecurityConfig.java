@@ -10,8 +10,10 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
@@ -30,11 +32,13 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // Health check không yêu cầu JWT
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/info"
                         ).permitAll()
 
+                        // Tenant Profile: chỉ OWNER
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/tenant-profiles"
@@ -45,21 +49,25 @@ public class SecurityConfig {
                                 "/api/tenant-profiles/**"
                         ).hasRole("OWNER")
 
+                        // Tạo hợp đồng: OWNER hoặc STAFF
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/contracts"
                         ).hasAnyRole("OWNER", "STAFF")
 
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/contracts/**"
-                        ).hasAnyRole("OWNER", "STAFF")
-
+                        // Danh sách hợp đồng: chỉ OWNER
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/contracts"
                         ).hasRole("OWNER")
 
+                        // Chi tiết hợp đồng: OWNER hoặc STAFF
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/contracts/**"
+                        ).hasAnyRole("OWNER", "STAFF")
+
+                        // Các API khác mặc định bị từ chối
                         .anyRequest().denyAll()
                 )
 
@@ -71,8 +79,7 @@ public class SecurityConfig {
                 .build();
     }
 
-    // Tránh Spring Boot đăng ký filter thêm lần thứ hai
-    // bên ngoài Spring Security Filter Chain.
+    // Tránh đăng ký BearerTokenFilter hai lần
     @Bean
     public FilterRegistrationBean<BearerTokenFilter>
     bearerTokenFilterRegistration(BearerTokenFilter filter) {
