@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: ${AUTH_TEST_DB_URL}
+    username: ${AUTH_TEST_DB_USERNAME}
+    password: ${AUTH_TEST_DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+  mail:
+    host: localhost
+    port: 2525
+    username: test
+    password: test
+
+eureka:
+  client:
+    enabled: false
+
+app:
+  jwt:
+    secret: test-only-jwt-secret-123456789012345678901234567890
+  internal:
+    service-key: test-only-internal-service-key-0123456789abcdef
+
+  bootstrap:
+    owner:
+      username: owner
+      password: OwnerTest@12345
+      email: owner@test.invalid
+
+  role-management:
+    manual-confirmation-enabled: false
+
+  password-reset:
+    frontend-url: http://localhost:4200/reset-password
+    mail-from: auth@test.invalid
