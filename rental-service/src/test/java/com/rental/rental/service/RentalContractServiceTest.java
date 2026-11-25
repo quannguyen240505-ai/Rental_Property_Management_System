@@ -9,8 +9,15 @@ import com.rental.rental.exception.ContractConflictException;
 import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.RentalContractRepository;
 import com.rental.rental.repository.TenantProfileRepository;
+import com.rental.rental.property.PropertyVerificationClient;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -27,6 +34,7 @@ class RentalContractServiceTest {
 
     private RentalContractRepository contractRepository;
     private TenantProfileRepository tenantRepository;
+    private PropertyVerificationClient propertyVerificationClient;
     private RentalContractService contractService;
 
     private UUID roomId;
@@ -37,10 +45,19 @@ class RentalContractServiceTest {
     void setUp() {
         contractRepository = mock(RentalContractRepository.class);
         tenantRepository = mock(TenantProfileRepository.class);
+        propertyVerificationClient = mock(PropertyVerificationClient.class);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        "owner-test-id",
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_OWNER"))
+                )
+        );
 
         contractService = new RentalContractService(
                 contractRepository,
-                tenantRepository
+                tenantRepository,
+                propertyVerificationClient
         );
 
         roomId = UUID.randomUUID();
@@ -56,6 +73,10 @@ class RentalContractServiceTest {
         );
     }
 
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
     @Test
     void createDraft_success() {
         TenantProfile tenant = new TenantProfile();
@@ -220,6 +241,76 @@ class RentalContractServiceTest {
                 () -> contractService.createDraft(invalidRequest)
         );
 
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+    @Test
+    void createDraft_propertyUnavailable_doesNotSave() {
+        TenantProfile tenant = new TenantProfile();
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+        doThrow(new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Property verification unavailable"
+        )).when(propertyVerificationClient)
+                .verifyRoomAccess(roomId, "owner-test-id");
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> contractService.createDraft(request)
+        );
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE,
+                exception.getStatusCode());
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+    @Test
+    void createDraft_owner_verifiesCorrectRoomAndUser() {
+        TenantProfile tenant = new TenantProfile();
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+        when(contractRepository.save(any(RentalContract.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        contractService.createDraft(request);
+        verify(propertyVerificationClient)
+                .verifyRoomAccess(roomId, "owner-test-id");
+        verify(contractRepository)
+                .save(any(RentalContract.class));
+    }
+    @Test
+    void createDraft_unauthenticated_doesNotSave() {
+        SecurityContextHolder.clearContext();
+        TenantProfile tenant = new TenantProfile();
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> contractService.createDraft(request)
+        );
+        assertEquals(HttpStatus.UNAUTHORIZED,
+                exception.getStatusCode());
+        verifyNoInteractions(propertyVerificationClient);
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+    @Test
+    void createDraft_staffForbidden_doesNotSave() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        "staff-test-id",
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_STAFF"))
+                )
+        );
+        TenantProfile tenant = new TenantProfile();
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> contractService.createDraft(request)
+        );
+        assertEquals(HttpStatus.FORBIDDEN,
+                exception.getStatusCode());
+        verifyNoInteractions(propertyVerificationClient);
         verify(contractRepository, never())
                 .save(any(RentalContract.class));
     }

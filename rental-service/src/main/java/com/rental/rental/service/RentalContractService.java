@@ -11,6 +11,9 @@ import com.rental.rental.repository.TenantProfileRepository;
 import com.rental.rental.exception.ResourceNotFoundException;
 
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.Authentication;
+import com.rental.rental.property.PropertyVerificationClient;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -21,13 +24,15 @@ public class RentalContractService {
 
     private final RentalContractRepository contractRepository;
     private final TenantProfileRepository tenantRepository;
+    private final PropertyVerificationClient propertyVerificationClient;
 
     public RentalContractService(
             RentalContractRepository contractRepository,
-            TenantProfileRepository tenantRepository) {
+            TenantProfileRepository tenantRepository, PropertyVerificationClient propertyVerificationClient) {
 
         this.contractRepository = contractRepository;
         this.tenantRepository = tenantRepository;
+        this.propertyVerificationClient = propertyVerificationClient;
     }
 
     @Transactional
@@ -44,6 +49,28 @@ public class RentalContractService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Tenant profile not found"));
 
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null
+                || !authentication.isAuthenticated()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED,
+                    "Authentication required"
+            );
+        }
+        boolean isOwner = authentication.getAuthorities().stream()
+                .anyMatch(authority ->
+                        "ROLE_OWNER".equals(authority.getAuthority()));
+        if (!isOwner) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Only OWNER can create rental contracts"
+            );
+        }
+        String ownerUserId = authentication.getName();
+        propertyVerificationClient.verifyRoomAccess(
+                request.roomId(), ownerUserId
+        );
         boolean hasOverlap = contractRepository.existsOverlappingContract(
                 request.roomId(),
                 request.startDate(),

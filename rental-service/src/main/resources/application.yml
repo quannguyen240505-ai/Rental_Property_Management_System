@@ -26,4 +26,12 @@ management:
 app:
   auth:
     introspect-url: ${AUTH_INTROSPECT_URL:http://localhost:8081/internal/auth/introspect}
-    service-key: ${AUTH_SERVICE_KEY}
+    service-key: ${AUTH_INTERNAL_SERVICE_KEY}
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: true

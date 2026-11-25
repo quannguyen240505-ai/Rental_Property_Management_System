@@ -199,4 +199,62 @@ class RentalContractControllerSecurityTest {
 
         verify(activationService).activate(contractId);
     }
+    @Test
+    void settlement_staff_returns403() throws Exception {
+        mockRole("staff-token", "STAFF");
+
+        mvc.perform(
+                        get("/api/contracts/{id}/settlement", contractId)
+                                .header("Authorization", "Bearer staff-token")
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(checkoutService);
+    }
+
+    @Test
+    void settlement_withoutToken_returns401() throws Exception {
+        mvc.perform(
+                        get("/api/contracts/{id}/settlement", contractId)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(checkoutService);
+    }
+    @Test
+    void staff_getContractDetail_returns403() throws Exception {
+        mockRole("staff-token", "STAFF");
+
+        mvc.perform(
+                        get("/api/contracts/{id}", contractId)
+                                .header("Authorization", "Bearer staff-token")
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(contractService);
+    }
+
+    @Test
+    void staff_createContract_returns403() throws Exception {
+        mockRole("staff-token", "STAFF");
+
+        mvc.perform(
+                        post("/api/contracts")
+                                .header("Authorization", "Bearer staff-token")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                        {
+                          "roomId": "00000000-0000-0000-0000-000000000001",
+                          "tenantProfileId": "00000000-0000-0000-0000-000000000002",
+                          "startDate": "2026-12-01",
+                          "endDate": "2027-12-01",
+                          "rentAmount": 3000000,
+                          "depositRequired": 2000000
+                        }
+                        """)
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(contractService);
+    }
 }

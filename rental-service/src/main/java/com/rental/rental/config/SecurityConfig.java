@@ -32,13 +32,13 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // Health check không yêu cầu JWT
+                        // Health check does not require JWT
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/info"
                         ).permitAll()
 
-                        // Tenant Profile: chỉ OWNER
+                        // Tenant Profile: OWNER only
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/tenant-profiles"
@@ -49,37 +49,43 @@ public class SecurityConfig {
                                 "/api/tenant-profiles/**"
                         ).hasRole("OWNER")
 
-                        // Tạo hợp đồng: OWNER hoặc STAFF
+                        // Create contract: OWNER only
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/contracts"
-                        ).hasAnyRole("OWNER", "STAFF")
+                        ).hasRole("OWNER")
 
-                        // Danh sách hợp đồng: chỉ OWNER
+                        // List contracts: OWNER only
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/contracts"
                         ).hasRole("OWNER")
 
-// Chi tiết hợp đồng: OWNER hoặc STAFF
+                        // Settlement: OWNER only
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/contracts/*/settlement"
+                        ).hasRole("OWNER")
+
+                        // Contract details: OWNER only (temporary)
                         .requestMatchers(
                                  HttpMethod.GET,
                                  "/api/contracts/**"
-                        ).hasAnyRole("OWNER", "STAFF")
+                        ).hasRole("OWNER")
 
-// Kích hoạt hợp đồng: chỉ OWNER
+                        // Activate contract: OWNER only
                         .requestMatchers(
                                  HttpMethod.POST,
                                  "/api/contracts/*/activate"
                         ).hasRole("OWNER")
 
-// Checkout và quyết toán tiền cọc: chỉ OWNER
-                                .requestMatchers(
-                                        HttpMethod.POST,
-                                        "/api/contracts/*/checkout"
-                                ).hasRole("OWNER")
+                        // Checkout and settlement: OWNER only
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/contracts/*/checkout"
+                        ).hasRole("OWNER")
 
-// Các API khác mặc định bị từ chối (feat(rental): implement checkout and deposit settlement)
+                // Deny all other API requests
                         .anyRequest().denyAll()
                 )
 
@@ -91,7 +97,7 @@ public class SecurityConfig {
                 .build();
     }
 
-    // Tránh đăng ký BearerTokenFilter hai lần
+    // Prevent duplicate BearerTokenFilter registration
     @Bean
     public FilterRegistrationBean<BearerTokenFilter>
     bearerTokenFilterRegistration(BearerTokenFilter filter) {
