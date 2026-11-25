@@ -32,13 +32,13 @@ class StaffPropertyAssignmentServiceTest {
 
     @Test void assigningValidStaff_savesMapping() {
         Property property = mock(Property.class);
-        when(properties.findById(propertyId)).thenReturn(Optional.of(property));
+        when(properties.findByIdForUpdate(propertyId)).thenReturn(Optional.of(property));
         service.assign(propertyId, staffId, ownerJwt);
         verify(auth).requireActiveStaff(staffId, ownerJwt);
         verify(assignments).saveAndFlush(any(StaffPropertyAssignment.class));
     }
     @Test void idempotentAssign_doesNotDuplicate() {
-        when(properties.findById(propertyId)).thenReturn(Optional.of(mock(Property.class)));
+        when(properties.findByIdForUpdate(propertyId)).thenReturn(Optional.of(mock(Property.class)));
         when(assignments.existsByStaffIdAndProperty_Id(staffId, propertyId)).thenReturn(true);
         service.assign(propertyId, staffId, ownerJwt);
         verify(assignments, never()).saveAndFlush(any(StaffPropertyAssignment.class));

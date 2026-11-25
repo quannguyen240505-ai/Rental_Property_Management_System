@@ -40,12 +40,17 @@ public class RoomService {
                 || request.propertyId() == null
                 || request.code() == null
                 || request.code().isBlank()
+                || request.code().trim().length() > 30
                 || request.title() == null
                 || request.title().isBlank()
+                || request.title().trim().length() > 150
                 || request.monthlyRent() == null
                 || request.monthlyRent() < 0
                 || (request.areaM2() != null
-                && request.areaM2().signum() <= 0)) {
+                && (request.areaM2().signum() <= 0
+                || request.areaM2().precision()
+                - request.areaM2().scale() > 6
+                || request.areaM2().scale() > 2))) {
 
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -54,7 +59,7 @@ public class RoomService {
         }
 
         Property property = propertyRepository
-                .findById(request.propertyId())
+                .findByIdForUpdate(request.propertyId())
                 .orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,

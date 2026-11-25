@@ -29,7 +29,7 @@ public class StaffPropertyAssignmentService {
 
     @Transactional
     public void assign(UUID propertyId, UUID staffId, String ownerAuthorization) {
-        Property property = properties.findById(propertyId).orElseThrow(() ->
+        Property property = properties.findByIdForUpdate(propertyId).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Property not found"));
         // Do not assign arbitrary UUIDs or users whose Auth role/status changed.
         authStaff.requireActiveStaff(staffId, ownerAuthorization);

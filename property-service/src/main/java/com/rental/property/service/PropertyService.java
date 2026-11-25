@@ -22,16 +22,30 @@ public class PropertyService {
 
     @Transactional
     public PropertyResponse createProperty(CreatePropertyRequest request) {
-        if (request == null || request.name() == null || request.name().isBlank()
-                || request.address() == null || request.address().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Property name and address are required");
+        if (request == null
+                || request.name() == null
+                || request.name().isBlank()
+                || request.name().trim().length() > 150
+                || request.address() == null
+                || request.address().isBlank()
+                || request.address().trim().length() > 255
+                || (request.contactPhone() != null
+                && request.contactPhone().trim().length() > 20)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid property information"
+            );
         }
         Property property = new Property();
         property.setName(request.name().trim());
         property.setAddress(request.address().trim());
         property.setDescription(request.description());
-        property.setContactPhone(request.contactPhone());
+        property.setContactPhone(
+                request.contactPhone() == null
+                        ? null
+                        : request.contactPhone().trim()
+        );
         return toResponse(propertyRepository.saveAndFlush(property));
     }
 
