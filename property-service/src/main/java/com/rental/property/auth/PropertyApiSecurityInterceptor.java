@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-/** JWT is always verified by Auth; OWNER/STAFF data scope is checked in controllers. */
+/** Auth Service alone validates JWT. VIEWINGS allow authenticated CUSTOMER/TENANT too. */
 @Component
 public class PropertyApiSecurityInterceptor implements HandlerInterceptor {
     private final AuthIntrospectionClient authClient;
@@ -22,12 +22,18 @@ public class PropertyApiSecurityInterceptor implements HandlerInterceptor {
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) return true;
         TokenIntrospectionResponse user = authClient.introspectBearerToken(
                 request.getHeader("Authorization"));
-        if (!"OWNER".equals(user.role()) && !"STAFF".equals(user.role())) {
+        String role = user.role();
+        String path = request.getRequestURI();
+        boolean viewingApi = "/api/viewings".equals(path)
+                || (path != null && path.startsWith("/api/viewings/"));
+        boolean allowed = "OWNER".equals(role) || "STAFF".equals(role)
+                || (viewingApi && ("CUSTOMER".equals(role) || "TENANT".equals(role)));
+        if (!allowed) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only OWNER or STAFF can access management APIs");
+                    viewingApi ? "Role not permitted for viewing API" : "Only OWNER or STAFF can manage Property");
         }
         request.setAttribute("authenticatedUserId", user.userId());
-        request.setAttribute("authenticatedRole", user.role());
+        request.setAttribute("authenticatedRole", role);
         return true;
     }
 }

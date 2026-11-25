@@ -6,7 +6,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class PropertyApiSecurityConfig implements WebMvcConfigurer {
-
     private final PropertyApiSecurityInterceptor securityInterceptor;
 
     public PropertyApiSecurityConfig(PropertyApiSecurityInterceptor securityInterceptor) {
@@ -15,11 +14,11 @@ public class PropertyApiSecurityConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // Only protect business management API paths. Never intercept /api/public/**.
-        registry.addInterceptor(securityInterceptor)
-                .addPathPatterns(
-                        "/api/properties", "/api/properties/**",
-                        "/api/rooms", "/api/rooms/**"
-                );
+        registry.addInterceptor(securityInterceptor).addPathPatterns(
+                "/api/properties", "/api/properties/**",
+                "/api/rooms", "/api/rooms/**",
+                "/api/viewings", "/api/viewings/**"
+        );
+        // The public catalog /api/public/** remains open to guests.
     }
 }
