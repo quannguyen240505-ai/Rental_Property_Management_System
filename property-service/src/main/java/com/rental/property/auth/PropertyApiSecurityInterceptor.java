@@ -26,11 +26,13 @@ public class PropertyApiSecurityInterceptor implements HandlerInterceptor {
         String path = request.getRequestURI();
         boolean viewingApi = "/api/viewings".equals(path)
                 || (path != null && path.startsWith("/api/viewings/"));
+        boolean roomHoldApi = "/api/room-holds".equals(path)
+                || (path != null && path.startsWith("/api/room-holds/"));
         boolean allowed = "OWNER".equals(role) || "STAFF".equals(role)
-                || (viewingApi && ("CUSTOMER".equals(role) || "TENANT".equals(role)));
+                || ((viewingApi || roomHoldApi) && ("CUSTOMER".equals(role) || "TENANT".equals(role)));
         if (!allowed) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    viewingApi ? "Role not permitted for viewing API" : "Only OWNER or STAFF can manage Property");
+                    (viewingApi || roomHoldApi) ? "Role not permitted for customer-facing API" : "Only OWNER or STAFF can manage Property");
         }
         request.setAttribute("authenticatedUserId", user.userId());
         request.setAttribute("authenticatedRole", role);

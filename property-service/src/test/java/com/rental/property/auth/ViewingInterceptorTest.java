@@ -57,6 +57,18 @@ class ViewingInterceptorTest {
     }
 
     @Test
+    void customerMayReadOwnRoomHoldsViaController() {
+        setup("CUSTOMER", "/api/room-holds/my");
+        assertTrue(interceptor.preHandle(request,response,new Object()));
+    }
+
+    @Test
+    void tenantMayReadOwnRoomHold() {
+        setup("TENANT", "/api/room-holds/"+UUID.randomUUID());
+        assertTrue(interceptor.preHandle(request,response,new Object()));
+    }
+
+    @Test
     void ownerStillEntersManagementApi() {
         setup("OWNER","/api/properties");
         assertTrue(interceptor.preHandle(request,response,new Object()));

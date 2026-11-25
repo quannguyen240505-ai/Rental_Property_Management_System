@@ -4713,6 +4713,931 @@
       ]
     },
     {
+      "name": "04D - Room Hold Phase 1 | STAFF & OWNER (FIXED v4)",
+      "item": [
+        {
+          "name": "HOLD_PREP_01 | Refresh OWNER JWT (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.unset(\"ownerToken\");",
+                  "const fields=['baseUrl','ownerUsername','ownerPassword'];",
+                  "for(const key of fields){if(!pm.environment.get(key)) throw new Error('HOLD_PREP: missing '+key+'. Run Auth setup first.');}",
+                  "pm.environment.unset('roomHoldId');",
+                  "pm.environment.unset('holdViewingId');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OWNER login returns 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){",
+                  "  const x=pm.response.json();",
+                  "  pm.test('OWNER role and accessToken valid',()=>{",
+                  "    pm.expect(x.role).to.eql('OWNER');",
+                  "    pm.expect(x.accessToken).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "  if(x.role==='OWNER' && x.accessToken)pm.environment.set('ownerToken',x.accessToken);",
+                  "}else{console.error('[HOLD_PREP_OWNER] status',pm.response.code,'body',pm.response.text());}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{ownerUsername}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_PREP_02 | Refresh STAFF JWT (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.unset(\"staffToken\");",
+                  "for(const key of ['baseUrl','staffUsername','staffPassword','staffId']){",
+                  "  if(!pm.environment.get(key))throw new Error('HOLD_PREP: missing '+key+'. Run Auth STAFF creation first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('STAFF login returns 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){",
+                  "  const x=pm.response.json();",
+                  "  pm.test('STAFF role and userId match',()=>{",
+                  "    pm.expect(x.role).to.eql('STAFF');",
+                  "    pm.expect(x.userId).to.eql(pm.environment.get('staffId'));",
+                  "    pm.expect(x.accessToken).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "  if(x.role==='STAFF' && x.userId===pm.environment.get('staffId') && x.accessToken){",
+                  "    pm.environment.set('staffToken',x.accessToken);",
+                  "  }",
+                  "}else{console.error('[HOLD_PREP_STAFF] status',pm.response.code,'body',pm.response.text());}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_PREP_03 | Refresh CUSTOMER JWT (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.unset(\"customerToken\");",
+                  "for(const key of ['baseUrl','customerUsername','customerId']){",
+                  "  if(!pm.environment.get(key))throw new Error('HOLD_PREP: missing '+key+'. Run Auth CUSTOMER creation first.');",
+                  "}",
+                  "// In a fresh full Collection run, TC_AUTH_001 clears postChangeToken.",
+                  "// When re-running this folder after Auth 07, customer password has changed.",
+                  "const passwordKey=pm.environment.get('postChangeToken')?'customerNewPassword':'customerPassword';",
+                  "const pw=pm.environment.get(passwordKey);",
+                  "if(!pw)throw new Error('HOLD_PREP: missing '+passwordKey);",
+                  "pm.variables.set('holdCustomerLoginPassword',pw);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CUSTOMER login returns 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){",
+                  "  const x=pm.response.json();",
+                  "  pm.test('CUSTOMER role and userId match',()=>{",
+                  "    pm.expect(x.role).to.eql('CUSTOMER');",
+                  "    pm.expect(x.userId).to.eql(pm.environment.get('customerId'));",
+                  "    pm.expect(x.accessToken).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "  if(x.role==='CUSTOMER' && x.userId===pm.environment.get('customerId') && x.accessToken){",
+                  "    pm.environment.set('customerToken',x.accessToken);",
+                  "  }",
+                  "}else{console.error('[HOLD_PREP_CUSTOMER] status',pm.response.code,'body',pm.response.text());}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{holdCustomerLoginPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_PREP_04 | Verify COMPLETED viewing belongs to QA run (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=[\"ownerToken\",\"propertyBaseUrl\",\"viewingId\",\"roomId\",\"staffId\",\"customerId\"];",
+                  "const missing=keys.filter(k=>!pm.environment.get(k));",
+                  "if(missing.length){console.warn(\"[HOLD_PREP_04] Skipped; missing \" + missing.join(\", \"));pm.execution.skipRequest();}",
+                  "pm.environment.unset(\"holdViewingId\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Viewing detail returns 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){",
+                  "  const x=pm.response.json();",
+                  "  pm.test('Viewing COMPLETED with same room, STAFF, CUSTOMER',()=>{",
+                  "    pm.expect(x.id).to.eql(pm.environment.get('viewingId'));",
+                  "    pm.expect(x.status).to.eql('COMPLETED');",
+                  "    pm.expect(x.roomId).to.eql(pm.environment.get('roomId'));",
+                  "    pm.expect(x.staffId).to.eql(pm.environment.get('staffId'));",
+                  "    pm.expect(x.customerId).to.eql(pm.environment.get('customerId'));",
+                  "  });",
+                  "  if(x.id===pm.environment.get('viewingId') && x.status==='COMPLETED' &&",
+                  "     x.roomId===pm.environment.get('roomId') && x.staffId===pm.environment.get('staffId') &&",
+                  "     x.customerId===pm.environment.get('customerId')) pm.environment.set('holdViewingId',x.id);",
+                  "}else{console.error('[HOLD_PREP_VIEWING] status',pm.response.code,'body',pm.response.text());}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/viewings/{{viewingId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "viewings",
+                "{{viewingId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_00 | OWNER reassigns STAFF to QA property (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const requiredHoldSetup=[\"ownerToken\",\"staffId\",\"propertyId\",\"holdViewingId\"];",
+                  "const missing=requiredHoldSetup.filter(k=>!pm.environment.get(k));",
+                  "if(missing.length){console.warn(\"[HOLD_00] Skipped; missing \" + missing.join(\", \"));pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('STAFF reassigned - HTTP 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){",
+                  "  const expected=pm.environment.get('staffId');",
+                  "  const reply=pm.response.json();",
+                  "  pm.test('Assigned STAFF and Property match',()=>{",
+                  "    pm.expect(reply.staffId).to.eql(expected);",
+                  "    pm.expect(reply.propertyId).to.eql(pm.environment.get('propertyId'));",
+                  "  });",
+                  "  const p=new Date(Date.now()+90*60*1000);",
+                  "  const f=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});",
+                  "  const t={}; for(const part of f.formatToParts(p)){t[part.type]=part.value;}",
+                  "  pm.environment.set('holdExpiresAt',`${t.year}-${t.month}-${t.day}T${t.hour}:${t.minute}:${t.second}`);",
+                  "  pm.environment.set('holdReceiptRef',`QA-RECEIPT-${pm.environment.get('runId')||Date.now()}`);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/properties/{{propertyId}}/staff/{{staffId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "staff",
+                "{{staffId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_01 | STAFF creates pending hold from COMPLETED viewing (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const keys=[\"staffToken\",\"staffId\",\"holdViewingId\",\"holdReceiptRef\",\"holdExpiresAt\"];",
+                  "const missing=keys.filter(k=>!pm.environment.get(k));",
+                  "if(missing.length){console.warn(\"[HOLD_01] Skipped; missing \" + missing.join(\", \"));pm.execution.skipRequest();}",
+                  "pm.environment.unset(\"roomHoldId\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Hold created 201',()=>pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){",
+                  "  const r=pm.response.json();",
+                  "  pm.test('Correct hold state, room and customer',()=>{",
+                  "    pm.expect(r.id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(r.viewingId).to.eql(pm.environment.get('holdViewingId'));",
+                  "    pm.expect(r.status).to.eql('PENDING_VERIFICATION');",
+                  "    pm.expect(r.roomStatus).to.eql('RESERVED_PENDING');",
+                  "    pm.expect(r.customerId).to.eql(pm.environment.get('customerId'));",
+                  "    pm.expect(r.roomId).to.eql(pm.environment.get('roomId'));",
+                  "  });",
+                  "  if(r.id)pm.environment.set('roomHoldId',r.id);",
+                  "}else{",
+                  "  console.error('[HOLD_01] status:',pm.response.code);",
+                  "  console.error('[HOLD_01] response body:',pm.response.text());",
+                  "  console.error('[HOLD_01] viewingId:',pm.environment.get('holdViewingId'));",
+                  "  console.error('[HOLD_01] roomId:',pm.environment.get('roomId'));",
+                  "  // No JWT or passwords are printed.",
+                  "}",
+                  "if(pm.response.code===500) console.error(\"[HOLD_01] Backend 500: inspect PropertyServiceApplication Run log for the first Hibernate/JPA exception (SQLState, LazyInitializationException). Do not weaken 201 assertion.\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viewingId\": \"{{holdViewingId}}\",\n  \"receiptReference\": \"{{holdReceiptRef}}\",\n  \"expiresAt\": \"{{holdExpiresAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_02 | CUSTOMER can view own pending hold (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Customer sees own holds (200)',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){let x=pm.response.json();pm.test('Hold list includes created hold',()=>pm.expect(x.map(i=>i.id)).to.include(pm.environment.get('roomHoldId')));}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds/my",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds",
+                "my"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_03 | CUSTOMER cannot approve owner verification (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CUSTOMER cannot approve deposit: 403',()=>pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationReference\": \"QA-VERIFIED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds/{{roomHoldId}}/approve",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds",
+                "{{roomHoldId}}",
+                "approve"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_04 | OWNER approves manually verified receipt (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OWNER approves hold (200)',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const r=pm.response.json();pm.test('Room is RESERVED',()=>{pm.expect(r.status).to.eql('APPROVED');pm.expect(r.roomStatus).to.eql('RESERVED');});}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationReference\": \"QA-OWNER-MANUAL-VERIFY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds/{{roomHoldId}}/approve",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds",
+                "{{roomHoldId}}",
+                "approve"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_05 | Approved room excluded from public rooms (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Public room list 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const r=pm.response.json();pm.test('Held room not advertised available',()=>pm.expect(r.map(x=>x.id)).not.to.include(pm.environment.get('roomId')));}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/public/rooms",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "rooms"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_06 | STAFF cannot cancel without OWNER (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('STAFF cannot close hold 403',()=>pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"depositResolutionReference\": \"QA-SETTLED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds/{{roomHoldId}}/cancel",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds",
+                "{{roomHoldId}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_07 | OWNER cancels after manual deposit resolution (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OWNER resolved deposit and cancelled hold: 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){const r=pm.response.json();pm.test('Room reopened only after deposit resolution',()=>{pm.expect(r.status).to.eql('CANCELLED');pm.expect(r.roomStatus).to.eql('AVAILABLE');});}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"depositResolutionReference\": \"QA-OWNER-DEPOSIT-RESOLVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds/{{roomHoldId}}/cancel",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds",
+                "{{roomHoldId}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_08 | Room is AVAILABLE after resolved hold (200)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Room detail 200',()=>pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){pm.test('Room status AVAILABLE',()=>pm.expect(pm.response.json().status).to.eql('AVAILABLE'));}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/rooms/{{roomId}}",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rooms",
+                "{{roomId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD_09 | Cannot reuse same completed viewing for second hold (409)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A prerequisite failure must not abort the entire Auth + Property runner.",
+                  "const missingHoldPrereqs = [\"roomHoldId\"].filter(k => !pm.environment.get(k));",
+                  "if (missingHoldPrereqs.length > 0) {",
+                  "    console.warn(\"[ROOM_HOLD] SKIPPED \" + pm.info.requestName + \": missing \" + missingHoldPrereqs.join(\", \"));",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Duplicate hold 409',()=>pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"viewingId\": \"{{viewingId}}\",\n  \"receiptReference\": \"{{holdReceiptRef}}\",\n  \"expiresAt\": \"{{holdExpiresAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{propertyBaseUrl}}/api/room-holds",
+              "host": [
+                "{{propertyBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "room-holds"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "05 - OWNER: role management",
       "item": [
         {
