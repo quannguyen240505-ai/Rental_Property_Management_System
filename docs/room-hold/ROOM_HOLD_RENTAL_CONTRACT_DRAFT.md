@@ -7,19 +7,20 @@ Trạng thái: **CHƯA CHỐT**, không triển khai như API hiện hành.
 - Rental: quản lý hợp đồng thuê; chỉ chuyển khoản cọc đã được Payment xác minh hợp lệ thành cọc hợp đồng đúng một lần.
 - Auth: mọi JWT user phải introspect; service-to-service không giả lập OWNER.
 
-## Luồng cần thống nhất
+## Luồng đã chốt với Payment (26/11/2026)
 
-1. STAFF/OWNER ghi nhận biên nhận cọc qua Payment => `receiptReference` (unique), số tiền, phương thức, người ghi nhận.
-2. CUSTOMER xác nhận chứng từ giao nhận (không đồng nghĩa OWNER đã nhận tiền).
-3. Property tạo PENDING hold cho room AVAILABLE, liên kết `receiptReference`, không thu tiền.
-4. Payment xác minh và đối soát biên nhận; OWNER chỉ xác nhận thủ công dựa trên tham chiếu của Payment (Phase 1 chưa tích hợp API), rồi Property chuyển APPROVED/RESERVED theo API có xác thực caller.
-5. Đến hạn/hủy: Payment đối soát/giải quyết tiền cọc, cấp `depositResolutionReference` => Property mới giải phóng phòng.
-6. Khi hợp đồng ACTIVE: Rental kiểm tra chứng từ cọc hợp lệ do Payment xác minh, chuyển cọc vào hợp đồng đúng một lần; phối hợp cập nhật Property OCCUPIED một cách idempotent.
+1. STAFF/OWNER tạo Hold sau viewing COMPLETED; Property không yêu cầu `receiptReference` ở thời điểm này.
+2. Payment chuyển tiếp nguyên `Authorization: Bearer <user JWT>` khi gọi `GET /api/room-holds/{holdId}/deposit-eligibility`. Property xác minh JWT qua Auth Introspection và OWNER/STAFF property scope; CUSTOMER/TENANT 403.
+3. Property trả đủ thông tin Hold/phòng/người thuê, `expiresAt` có offset +07:00, `eligible` boolean và `reason` null khi đủ điều kiện; không xác nhận đã thanh toán.
+4. Payment tạo và đối soát biên nhận; Payment đảm bảo UNIQUE hold_id, retry cùng người/nội dung idempotent, dữ liệu khác 409.
+5. Luồng OWNER_VERIFIED, confirm và xử lý tiền cọc trước approve/cancel/expire cần thống nhất giao ước xác thực riêng và kiểm thử E2E. **Chưa được đánh dấu hoàn tất.**
 
-**API proposal chỉ để họp nhóm (không có trong code Phase 1):**
+Xem `PROPERTY_PAYMENT_COMPATIBILITY_DRAFT.md` để biết API và mã lỗi.
 
-- `GET /internal/payment/hold-receipts/{receiptReference}/status` => holder/room, amount, status, ownerVerified, settledAt, convertedContractId.
-- `POST /internal/property/room-holds/{holdId}/confirm-from-payment` => xác nhận từ service có định danh riêng, không dùng JWT của OWNER.
-- `POST /internal/property/room-holds/{holdId}/convert` => idempotencyKey, contractId, kỳ hạn hiệu lực.
+## Các bước tích hợp còn chưa chốt
 
-Không kết nối trực tiếp database của service khác. Cần giao ước retry, idempotency, audit, error 409/503, event outbox.
+- Payment -> Property thông báo/tra cứu receipt đã tạo (để Property có nguồn tin cậy cho `RECEIPT_ALREADY_EXISTS`).
+- Xác minh tiền đã nhận/OWNER_VERIFIED trước khi đổi trạng thái Hold sang APPROVED.
+- Bảo vệ trường hợp Hold hủy hoặc hết hạn giữa lúc Payment kiểm tra và phát hành phiếu (TOCTOU).
+- Rental chỉ áp dụng chứng từ cọc đã được Payment xác minh vào hợp đồng, theo idempotency key.
+- Không kết nối trực tiếp database của service khác; cần retry, audit, idempotency, xử lý 409/503 rõ ràng.

@@ -2,6 +2,7 @@ package com.rental.property.service;
 
 import com.rental.property.dto.request.CreateRoomHoldRequest;
 import com.rental.property.dto.response.RoomHoldResponse;
+import com.rental.property.dto.response.DepositEligibilityResponse;
 import com.rental.property.entity.Room;
 import com.rental.property.entity.RoomHold;
 import com.rental.property.entity.RoomHoldStatus;
@@ -30,6 +31,9 @@ import java.util.UUID;
 public class RoomHoldService {
     private static final Duration MAX_DURATION = Duration.ofHours(72);
     private static final Duration MIN_DURATION = Duration.ofMinutes(5);
+    // Historical room_holds.expires_at is DATETIME without an offset.
+    // The existing Property workflow stores times in Asia/Ho_Chi_Minh local time.
+    private static final ZoneId HOLD_TIME_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final RoomHoldRepository holds;
     private final RoomRepository rooms;
     private final ViewingAppointmentRepository viewings;
@@ -106,7 +110,10 @@ public class RoomHoldService {
         if (req == null || req.viewingId() == null || req.expiresAt() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "viewingId and expiresAt required");
         }
-        String receipt = reference(req.receiptReference(), "receiptReference");
+        // Payment is the owner of financial receipts. A hold may be created
+        // before a receipt exists; a non-null legacy reference stays supported.
+        String receipt = req.receiptReference() == null
+                ? null : reference(req.receiptReference(), "receiptReference");
         LocalDateTime current = now();
         Duration duration = Duration.between(current, req.expiresAt());
         if (duration.compareTo(MIN_DURATION) < 0 || duration.compareTo(MAX_DURATION) > 0) {
@@ -124,7 +131,8 @@ public class RoomHoldService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Viewing must be completed and room AVAILABLE");
         }
-        if (holds.existsByViewing_Id(v.getId()) || holds.existsByReceiptReference(receipt)) {
+        if (holds.existsByViewing_Id(v.getId())
+                || (receipt != null && holds.existsByReceiptReference(receipt))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate viewing or receipt reference");
         }
         RoomHold hold = new RoomHold(locked, v, actorId, receipt, req.expiresAt());
@@ -198,6 +206,33 @@ public class RoomHoldService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public RoomHoldResponse expire(UUID id, UUID ownerId, String resolution) {
         return close(id, ownerId, resolution, RoomHoldStatus.EXPIRED);
+    }
+
+    /**
+     * Read-only Property state that Payment can verify before accepting deposit.
+     * This is not evidence that any money has been paid or verified.
+     */
+    @Transactional(readOnly = true)
+    public DepositEligibilityResponse depositEligibility(UUID id) {
+        RoomHold hold = getEntity(id);
+        Room room = hold.getRoom();
+        boolean pending = hold.getStatus() == RoomHoldStatus.PENDING_VERIFICATION;
+        boolean reservedPending = room.getStatus() == RoomStatus.RESERVED_PENDING;
+        boolean notExpired = now().isBefore(hold.getExpiresAt());
+        boolean eligible = pending && reservedPending && notExpired;
+        // Reasons are Payment-contract codes, not prose. The positive case
+        // requires JSON null, not the string "ELIGIBLE".
+        String reason = !pending ? "INVALID_HOLD_STATUS"
+                : !reservedPending ? "INVALID_ROOM_STATUS"
+                : !notExpired ? "HOLD_EXPIRED" : null;
+        // Do NOT treat the legacy receiptReference as proof that Payment
+        // issued a receipt; only Payment owns that information. Therefore
+        // RECEIPT_ALREADY_EXISTS must not be guessed by Property.
+        return new DepositEligibilityResponse(
+                hold.getId(), room.getProperty().getId(), room.getId(),
+                hold.getCustomerId(), hold.getStatus(), room.getStatus(),
+                hold.getExpiresAt().atZone(HOLD_TIME_ZONE).toOffsetDateTime(),
+                eligible, reason);
     }
 
     @Transactional(readOnly = true)

@@ -31,8 +31,8 @@ public class RoomHold {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
-    // External receipt is owned by Rental/Payment; Property stores only a reference.
-    @Column(name = "receipt_reference", nullable = false, unique = true, length = 100)
+    // Optional legacy reference. Financial receipts are owned by Payment.
+    @Column(name = "receipt_reference", unique = true, length = 100)
     private String receiptReference;
 
     @Column(name = "expires_at", nullable = false)

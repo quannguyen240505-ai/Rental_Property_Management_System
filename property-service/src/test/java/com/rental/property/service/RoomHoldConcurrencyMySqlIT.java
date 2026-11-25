@@ -159,6 +159,22 @@ class RoomHoldConcurrencyMySqlIT {
         assertEquals(RoomStatus.RESERVED_PENDING, rooms.findById(room.getId()).orElseThrow().getStatus());
     }
 
+
+@Test
+void receiptFreeHoldsCanBeCreatedForDifferentRooms() {
+    Room firstRoom = newRoom("H-NO-RECEIPT-1");
+    Room secondRoom = newRoom("H-NO-RECEIPT-2");
+    var first = service.create(request(completed(firstRoom), null), owner, false);
+    var second = service.create(request(completed(secondRoom), null), owner, false);
+    assertNull(first.receiptReference());
+    assertNull(second.receiptReference());
+    assertEquals(RoomHoldStatus.PENDING_VERIFICATION, first.status());
+    assertEquals(RoomHoldStatus.PENDING_VERIFICATION, second.status());
+    assertEquals(2, holds.findByRoom_Property_IdOrderByCreatedAtDesc(propertyId).size());
+    assertTrue(service.depositEligibility(first.id()).eligible());
+    assertTrue(service.depositEligibility(second.id()).eligible());
+}
+
     @Test
     void sameReceiptDifferentRooms_failedRoomRemainsAvailable() throws Exception {
         Room roomA = newRoom("H102");

@@ -111,6 +111,86 @@ class RoomHoldServiceTest {
                 service.create(request(),ownerId,false).status());
     }
 
+
+@Test void createWithoutReceiptIsAllowedBeforePayment() {
+    var noReceipt = new CreateRoomHoldRequest(viewingId, null, inHour());
+    var result = service.create(noReceipt, staffId, true);
+    assertEquals(RoomHoldStatus.PENDING_VERIFICATION, result.status());
+    verify(holds, never()).existsByReceiptReference(any());
+    verify(room).setStatus(RoomStatus.RESERVED_PENDING);
+}
+
+@Test void emptyLegacyReceiptStillRejected() {
+    var blankReceipt = new CreateRoomHoldRequest(viewingId, "  ", inHour());
+    status(400, () -> service.create(blankReceipt, staffId, true));
+}
+
+private RoomHold mockEligibilityHold(UUID holdId, RoomHoldStatus status, LocalDateTime expiry) {
+    RoomHold hold = mock(RoomHold.class);
+    when(holds.findById(holdId)).thenReturn(Optional.of(hold));
+    when(hold.getId()).thenReturn(holdId);
+    when(hold.getRoom()).thenReturn(room);
+    when(hold.getStatus()).thenReturn(status);
+    when(hold.getCustomerId()).thenReturn(customerId);
+    when(hold.getExpiresAt()).thenReturn(expiry);
+    return hold;
+}
+
+@Test void depositEligibilityTrueOnlyForPendingUnexpiredReservedRoom() {
+    UUID holdId = UUID.randomUUID();
+    mockEligibilityHold(holdId, RoomHoldStatus.PENDING_VERIFICATION, inHour());
+    when(room.getStatus()).thenReturn(RoomStatus.RESERVED_PENDING);
+    var response = service.depositEligibility(holdId);
+    assertTrue(response.eligible());
+    assertNull(response.reason());
+    assertEquals(ZoneOffset.ofHours(7), response.expiresAt().getOffset());
+    assertEquals(inHour(), response.expiresAt().toLocalDateTime());
+    assertEquals(customerId, response.customerId());
+    assertEquals(roomId, response.roomId());
+}
+
+@Test void depositEligibilityFalseForExpiredHold() {
+    UUID holdId = UUID.randomUUID();
+    mockEligibilityHold(holdId, RoomHoldStatus.PENDING_VERIFICATION, inHour().minusHours(2));
+    when(room.getStatus()).thenReturn(RoomStatus.RESERVED_PENDING);
+    var response = service.depositEligibility(holdId);
+    assertFalse(response.eligible());
+    assertEquals("HOLD_EXPIRED", response.reason());
+}
+
+@Test void depositEligibilityFalseForApprovedHold() {
+    UUID holdId = UUID.randomUUID();
+    mockEligibilityHold(holdId, RoomHoldStatus.APPROVED, inHour());
+    when(room.getStatus()).thenReturn(RoomStatus.RESERVED);
+    var response = service.depositEligibility(holdId);
+    assertFalse(response.eligible());
+    assertEquals("INVALID_HOLD_STATUS", response.reason());
+}
+
+    @Test void depositEligibilityFalseForWrongRoomStatus() {
+        UUID holdId = UUID.randomUUID();
+        mockEligibilityHold(holdId, RoomHoldStatus.PENDING_VERIFICATION, inHour());
+        when(room.getStatus()).thenReturn(RoomStatus.AVAILABLE);
+        var response = service.depositEligibility(holdId);
+        assertFalse(response.eligible());
+        assertEquals("INVALID_ROOM_STATUS", response.reason());
+    }
+
+    @Test void legacyReceiptReferenceMustNotBeInterpretedAsPaymentReceipt() {
+        UUID holdId = UUID.randomUUID();
+        RoomHold hold = mockEligibilityHold(holdId,
+                RoomHoldStatus.PENDING_VERIFICATION, inHour());
+        when(room.getStatus()).thenReturn(RoomStatus.RESERVED_PENDING);
+        assertTrue(service.depositEligibility(holdId).eligible());
+        verify(hold, never()).getReceiptReference();
+    }
+
+    @Test void depositEligibilityUnknownHoldReturns404() {
+        UUID unknownId=UUID.randomUUID();
+        when(holds.findById(unknownId)).thenReturn(Optional.empty());
+        status(404,()->service.depositEligibility(unknownId));
+    }
+
     @Test void duplicateReceiptIsRejected() {
         when(holds.existsByReceiptReference("QA-RECEIPT-A")).thenReturn(true);
         status(409, () -> service.create(request(),staffId,true));

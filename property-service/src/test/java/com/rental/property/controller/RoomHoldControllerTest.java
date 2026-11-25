@@ -3,8 +3,10 @@ package com.rental.property.controller;
 import com.rental.property.auth.PropertyAccessService;
 import com.rental.property.dto.request.CreateRoomHoldRequest;
 import com.rental.property.dto.request.ConfirmRoomHoldRequest;
-import com.rental.property.dto.response.RoomHoldResponse;
+import com.rental.property.dto.response.DepositEligibilityResponse;
 import com.rental.property.service.RoomHoldService;
+import com.rental.property.entity.RoomHoldStatus;
+import com.rental.property.entity.RoomStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -65,5 +68,52 @@ class RoomHoldControllerTest {
                 ()->controller.approve(UUID.randomUUID(),new ConfirmRoomHoldRequest("VERIFIED"),request))
                 .getStatusCode().value());
         verifyNoInteractions(holds);
+    }
+
+    private DepositEligibilityResponse eligible(UUID holdId, UUID customerId, UUID propertyId) {
+        return new DepositEligibilityResponse(holdId, propertyId, UUID.randomUUID(),
+                customerId, RoomHoldStatus.PENDING_VERIFICATION, RoomStatus.RESERVED_PENDING,
+                LocalDateTime.now().plusHours(1).atOffset(ZoneOffset.ofHours(7)), true, null);
+    }
+
+    @Test void ownerCanReadDepositEligibility() {
+        UUID id=UUID.randomUUID();
+        when(request.getAttribute("authenticatedRole")).thenReturn("OWNER");
+        when(holds.depositEligibility(id)).thenReturn(eligible(id,UUID.randomUUID(),UUID.randomUUID()));
+        assertTrue(controller.depositEligibility(id, request).eligible());
+    }
+
+    @Test void customerCannotCheckDepositEligibilityEvenForOwnHold() {
+        UUID id=UUID.randomUUID();
+        when(request.getAttribute("authenticatedRole")).thenReturn("CUSTOMER");
+        assertEquals(403,assertThrows(ResponseStatusException.class,
+                () -> controller.depositEligibility(id,request)).getStatusCode().value());
+        verifyNoInteractions(holds);
+    }
+
+    @Test void tenantCannotCheckDepositEligibility() {
+        UUID id=UUID.randomUUID();
+        when(request.getAttribute("authenticatedRole")).thenReturn("TENANT");
+        assertEquals(403,assertThrows(ResponseStatusException.class,
+                () -> controller.depositEligibility(id,request)).getStatusCode().value());
+        verifyNoInteractions(holds);
+    }
+
+    @Test void assignedStaffCanCheckDepositEligibility() {
+        UUID id=UUID.randomUUID(), propertyId=UUID.randomUUID();
+        when(request.getAttribute("authenticatedRole")).thenReturn("STAFF");
+        when(holds.depositEligibility(id)).thenReturn(eligible(id,UUID.randomUUID(),propertyId));
+        assertTrue(controller.depositEligibility(id,request).eligible());
+        verify(access).requirePropertyAccess(request,propertyId);
+    }
+
+    @Test void staffMustHavePropertyAccessForDepositEligibility() {
+        UUID id=UUID.randomUUID(), propertyId=UUID.randomUUID();
+        when(request.getAttribute("authenticatedRole")).thenReturn("STAFF");
+        when(holds.depositEligibility(id)).thenReturn(eligible(id,UUID.randomUUID(),propertyId));
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN))
+                .when(access).requirePropertyAccess(request,propertyId);
+        assertEquals(403,assertThrows(ResponseStatusException.class,
+                () -> controller.depositEligibility(id,request)).getStatusCode().value());
     }
 }
