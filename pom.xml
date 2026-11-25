@@ -22,8 +22,11 @@
 
     <modules>
         <module>service-registry</module>
+        <module>billing-service</module>
+        <module>payment-service</module>
         <module>auth-service</module>
         <module>api-gateway</module>
+        <module>notification-service</module>
         <module>property-service</module>
     </modules>
 
