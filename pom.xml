@@ -27,6 +27,7 @@
         <module>auth-service</module>
         <module>api-gateway</module>
         <module>notification-service</module>
+        <module>rental-service</module>
         <module>property-service</module>
     </modules>
 

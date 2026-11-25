@@ -1,0 +1,37 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: rental-service
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/rental_rental_db
+    username: ${RENTAL_DB_USERNAME}
+    password: ${RENTAL_DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  auth:
+    introspect-url: ${AUTH_INTROSPECT_URL:http://localhost:8081/internal/auth/introspect}
+    service-key: ${AUTH_INTERNAL_SERVICE_KEY}
+eureka:
+  client:
+    enabled: ${EUREKA_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: true
