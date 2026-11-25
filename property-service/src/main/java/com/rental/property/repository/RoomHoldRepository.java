@@ -18,6 +18,9 @@ public interface RoomHoldRepository extends JpaRepository<RoomHold, UUID> {
     List<RoomHold> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
     List<RoomHold> findByRoom_Property_IdOrderByCreatedAtDesc(UUID propertyId);
 
+    @Query("select h.room.id from RoomHold h where h.id = :id")
+    Optional<UUID> findRoomIdById(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select h from RoomHold h where h.id = :id")
     Optional<RoomHold> findForUpdate(@Param("id") UUID id);

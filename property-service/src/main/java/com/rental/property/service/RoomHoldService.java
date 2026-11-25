@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -138,11 +139,13 @@ public class RoomHoldService {
     }
 
     // Manual OWNER attestation; no claim of automatic payment verification.
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public RoomHoldResponse approve(UUID id, UUID ownerId, String verificationReference) {
         String proof = reference(verificationReference, "verificationReference");
-        RoomHold snapshot = getEntity(id);
-        Room room = lockRoom(snapshot.getRoom().getId());
+        // Projection first: avoid caching a stale @Version entity while waiting.
+        UUID roomId = holds.findRoomIdById(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Room hold not found"));
+        Room room = lockRoom(roomId);
         RoomHold hold = lockHold(id);
         if (hold.getStatus() != RoomHoldStatus.PENDING_VERIFICATION
                 || room.getStatus() != RoomStatus.RESERVED_PENDING) {
@@ -163,8 +166,10 @@ public class RoomHoldService {
     private RoomHoldResponse close(UUID id, UUID ownerId, String depositResolutionReference,
                                    RoomHoldStatus outcome) {
         String resolution = reference(depositResolutionReference, "depositResolutionReference");
-        RoomHold snapshot = getEntity(id);
-        Room room = lockRoom(snapshot.getRoom().getId());
+        // Projection first: avoid caching a stale @Version entity while waiting.
+        UUID roomId = holds.findRoomIdById(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Room hold not found"));
+        Room room = lockRoom(roomId);
         RoomHold hold = lockHold(id);
         if (hold.getStatus() != RoomHoldStatus.PENDING_VERIFICATION
                 && hold.getStatus() != RoomHoldStatus.APPROVED) {
@@ -185,12 +190,12 @@ public class RoomHoldService {
         return map(hold);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public RoomHoldResponse cancel(UUID id, UUID ownerId, String resolution) {
         return close(id, ownerId, resolution, RoomHoldStatus.CANCELLED);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public RoomHoldResponse expire(UUID id, UUID ownerId, String resolution) {
         return close(id, ownerId, resolution, RoomHoldStatus.EXPIRED);
     }

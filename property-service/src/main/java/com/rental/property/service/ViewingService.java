@@ -12,6 +12,7 @@ import com.rental.property.repository.ViewingAppointmentRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,29 +29,29 @@ public class ViewingService {
     private final ViewingAppointmentRepository viewings;
     private final RoomRepository rooms;
     private final StaffPropertyAssignmentRepository assignments;
+    private final ViewingActorLockService actorLocks;
     private final Clock clock;
 
     @Autowired
     public ViewingService(ViewingAppointmentRepository viewings, RoomRepository rooms,
-                          StaffPropertyAssignmentRepository assignments) {
-        this(viewings, rooms, assignments, Clock.system(ZoneId.of("Asia/Ho_Chi_Minh")));
+                          StaffPropertyAssignmentRepository assignments,
+                          ViewingActorLockService actorLocks) {
+        this(viewings, rooms, assignments, actorLocks,
+                Clock.system(ZoneId.of("Asia/Ho_Chi_Minh")));
     }
 
     // Package-private constructor for deterministic unit tests.
     ViewingService(ViewingAppointmentRepository viewings, RoomRepository rooms,
-                   StaffPropertyAssignmentRepository assignments, Clock clock) {
+                   StaffPropertyAssignmentRepository assignments,
+                   ViewingActorLockService actorLocks, Clock clock) {
         this.viewings = viewings;
         this.rooms = rooms;
         this.assignments = assignments;
+        this.actorLocks = actorLocks;
         this.clock = clock;
     }
 
     private LocalDateTime now() { return LocalDateTime.now(clock); }
-
-    private Room room(UUID id) {
-        return rooms.findById(id).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
-    }
 
     private ViewingAppointment getEntity(UUID id) {
         return viewings.findById(id).orElseThrow(() ->
@@ -64,13 +65,16 @@ public class ViewingService {
                 v.getCreatedAt(), v.getUpdatedAt());
     }
 
-    @Transactional
+    // READ_COMMITTED makes the overlap query see commits made while waiting on room lock.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ViewingResponse create(CreateViewingRequest req, UUID customerId) {
         if (req == null || req.roomId() == null || req.startAt() == null || req.endAt() == null
                 || !req.endAt().isAfter(req.startAt()) || !req.startAt().isAfter(now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid future viewing time");
         }
-        Room r = room(req.roomId());
+        // Acquire room mutex BEFORE the first overlap read, across all app instances.
+        Room r = rooms.findForUpdateById(req.roomId()).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
         if (!Boolean.TRUE.equals(r.getPublished()) || r.getStatus() != RoomStatus.AVAILABLE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Room not available for viewing");
         }
@@ -103,17 +107,19 @@ public class ViewingService {
         return result.stream().map(this::map).toList();
     }
 
-    /** Lock order: staff's assignment row(s) -> room row -> viewing row.
-     * This serializes claims for the same STAFF and for the same room.
-     * The database (not a JVM synchronized block) arbitrates concurrent requests.
+    /** Lock order: actor mutex -> STAFF assignments (if STAFF) -> room -> viewing.
+     * The actor mutex also covers OWNER (who has no assignment row to lock).
+     * READ_COMMITTED avoids stale snapshot overlap counts after lock contention.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ViewingResponse claim(UUID id, UUID actorId, boolean staffActor) {
+        actorLocks.lock(actorId);
         if (staffActor && assignments.lockByStaffId(actorId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No assigned property");
         }
-        ViewingAppointment snapshot = getEntity(id);
-        UUID roomId = snapshot.getRoom().getId();
+        // Scalar projection avoids loading a stale ViewingAppointment before room lock.
+        UUID roomId = viewings.findRoomIdById(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Viewing not found"));
         Room lockedRoom = rooms.findForUpdateById(roomId).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
         ViewingAppointment v = viewings.findForUpdate(id).orElseThrow(() ->

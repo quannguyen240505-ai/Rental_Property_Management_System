@@ -19,6 +19,10 @@ public interface ViewingAppointmentRepository extends JpaRepository<ViewingAppoi
     List<ViewingAppointment> findByStatusAndRoom_Property_IdInOrderByStartAtAsc(
             ViewingStatus status, List<UUID> propertyIds);
 
+    // Read only the immutable room ID; do not populate persistence context prematurely.
+    @Query("select v.room.id from ViewingAppointment v where v.id = :id")
+    Optional<UUID> findRoomIdById(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select v from ViewingAppointment v where v.id = :id")
     Optional<ViewingAppointment> findForUpdate(@Param("id") UUID id);

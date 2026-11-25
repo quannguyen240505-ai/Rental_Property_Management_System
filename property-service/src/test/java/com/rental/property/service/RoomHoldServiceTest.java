@@ -123,7 +123,7 @@ class RoomHoldServiceTest {
         when(h.getViewing()).thenReturn(viewing);
         when(h.getStatus()).thenReturn(RoomHoldStatus.PENDING_VERIFICATION);
         when(h.getExpiresAt()).thenReturn(inHour());
-        when(holds.findById(id)).thenReturn(Optional.of(h));
+        when(holds.findRoomIdById(id)).thenReturn(Optional.of(roomId));
         when(holds.findForUpdate(id)).thenReturn(Optional.of(h));
         when(room.getStatus()).thenReturn(RoomStatus.RESERVED_PENDING);
         service.approve(id,ownerId,"OWNER-VERIFIED-RECEIPT");
@@ -137,7 +137,7 @@ class RoomHoldServiceTest {
         when(h.getRoom()).thenReturn(room);
         when(h.getStatus()).thenReturn(RoomHoldStatus.PENDING_VERIFICATION);
         when(h.getExpiresAt()).thenReturn(inHour().minusHours(2));
-        when(holds.findById(id)).thenReturn(Optional.of(h));
+        when(holds.findRoomIdById(id)).thenReturn(Optional.of(roomId));
         when(holds.findForUpdate(id)).thenReturn(Optional.of(h));
         when(room.getStatus()).thenReturn(RoomStatus.RESERVED_PENDING);
         status(409, () -> service.approve(id,ownerId,"VERIFIED"));
@@ -154,7 +154,7 @@ class RoomHoldServiceTest {
         when(h.getRoom()).thenReturn(room);
         when(h.getStatus()).thenReturn(RoomHoldStatus.PENDING_VERIFICATION);
         when(h.getExpiresAt()).thenReturn(inHour());
-        when(holds.findById(id)).thenReturn(Optional.of(h));
+        when(holds.findRoomIdById(id)).thenReturn(Optional.of(roomId));
         when(holds.findForUpdate(id)).thenReturn(Optional.of(h));
         status(409, () -> service.expire(id,ownerId,"REFUND-SETTLED"));
     }

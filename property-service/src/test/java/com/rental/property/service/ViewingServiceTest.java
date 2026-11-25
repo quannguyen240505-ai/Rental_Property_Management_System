@@ -31,6 +31,7 @@ class ViewingServiceTest {
     @Mock ViewingAppointmentRepository viewings;
     @Mock RoomRepository rooms;
     @Mock StaffPropertyAssignmentRepository assignments;
+    @Mock ViewingActorLockService actorLocks;
 
     private ViewingService service;
     private final UUID roomId = UUID.randomUUID();
@@ -44,7 +45,7 @@ class ViewingServiceTest {
 
     @BeforeEach
     void init() {
-        service = new ViewingService(viewings, rooms, assignments, clock);
+        service = new ViewingService(viewings, rooms, assignments, actorLocks, clock);
     }
 
     private Room publishedRoom() {
@@ -79,14 +80,14 @@ class ViewingServiceTest {
     @Test
     void createRejectsUnpublishedRoom() {
         Room r = publishedRoom(); r.setPublished(false);
-        when(rooms.findById(roomId)).thenReturn(Optional.of(r));
+        when(rooms.findForUpdateById(roomId)).thenReturn(Optional.of(r));
         status(409, () -> service.create(new CreateViewingRequest(roomId,start,end),customerId));
         verify(viewings, never()).saveAndFlush(any());
     }
 
     @Test
     void createRejectsDuplicateActiveRequest() {
-        when(rooms.findById(roomId)).thenReturn(Optional.of(publishedRoom()));
+        when(rooms.findForUpdateById(roomId)).thenReturn(Optional.of(publishedRoom()));
         when(viewings.countCustomerOverlap(eq(customerId),eq(roomId),anyList(),eq(start),eq(end)))
                 .thenReturn(1L);
         status(409, () -> service.create(new CreateViewingRequest(roomId,start,end),customerId));
@@ -95,7 +96,7 @@ class ViewingServiceTest {
     @Test
     void createKeepsRoomAvailableAndReturnsRequested() {
         Room r=publishedRoom();
-        when(rooms.findById(roomId)).thenReturn(Optional.of(r));
+        when(rooms.findForUpdateById(roomId)).thenReturn(Optional.of(r));
         when(viewings.saveAndFlush(any(ViewingAppointment.class))).thenAnswer(inv -> {
             ViewingAppointment v = inv.getArgument(0);
             ReflectionTestUtils.setField(v, "id", viewingId);
@@ -113,7 +114,7 @@ class ViewingServiceTest {
         Room r=publishedRoom();
         ViewingAppointment v=requested(r);
         when(assignments.lockByStaffId(staffId)).thenReturn(List.of(new StaffPropertyAssignment(staffId,r.getProperty())));
-        when(viewings.findById(viewingId)).thenReturn(Optional.of(v));
+        when(viewings.findRoomIdById(viewingId)).thenReturn(Optional.of(roomId));
         when(rooms.findForUpdateById(roomId)).thenReturn(Optional.of(r));
         when(viewings.findForUpdate(viewingId)).thenReturn(Optional.of(v));
         when(viewings.saveAndFlush(v)).thenReturn(v);
@@ -126,7 +127,7 @@ class ViewingServiceTest {
     void claimRejectsRoomTimeConflict() {
         Room r=publishedRoom(); ViewingAppointment v=requested(r);
         when(assignments.lockByStaffId(staffId)).thenReturn(List.of(new StaffPropertyAssignment(staffId,r.getProperty())));
-        when(viewings.findById(viewingId)).thenReturn(Optional.of(v));
+        when(viewings.findRoomIdById(viewingId)).thenReturn(Optional.of(roomId));
         when(rooms.findForUpdateById(roomId)).thenReturn(Optional.of(r));
         when(viewings.findForUpdate(viewingId)).thenReturn(Optional.of(v));
         when(viewings.countRoomOverlap(roomId,viewingId,ViewingStatus.CONFIRMED,start,end)).thenReturn(1L);
@@ -138,7 +139,7 @@ class ViewingServiceTest {
     void claimRejectsStaffAlreadyBusyInAnotherRoom() {
         Room r=publishedRoom(); ViewingAppointment v=requested(r);
         when(assignments.lockByStaffId(staffId)).thenReturn(List.of(new StaffPropertyAssignment(staffId,r.getProperty())));
-        when(viewings.findById(viewingId)).thenReturn(Optional.of(v));
+        when(viewings.findRoomIdById(viewingId)).thenReturn(Optional.of(roomId));
         when(rooms.findForUpdateById(roomId)).thenReturn(Optional.of(r));
         when(viewings.findForUpdate(viewingId)).thenReturn(Optional.of(v));
         when(viewings.countStaffOverlap(staffId,viewingId,ViewingStatus.CONFIRMED,start,end)).thenReturn(1L);
