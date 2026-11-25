@@ -60,6 +60,12 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Eureka Service Discovery -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
