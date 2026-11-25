@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/rental_test
+    username: rental_tester
+    password: ${RENTAL_TEST_DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+app:
+  auth:
+    introspect-url: http://localhost:8081/internal/auth/introspect
+    service-key: integration-test-only
