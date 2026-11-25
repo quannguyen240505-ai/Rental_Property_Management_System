@@ -8,9 +8,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record UserResponse(UUID id, String username, String fullName, String email, String phone, Role role,
-		UserStatus status, Instant createdAt, Instant updatedAt) {
+		UserStatus status, Instant createdAt, Instant updatedAt, boolean googleLinked) {
 	public static UserResponse from(AppUser user) {
 		return new UserResponse(user.getId(), user.getUsername(), user.getFullName(), user.getEmail(), user.getPhone(),
-				user.getRole(), user.getStatus(), user.getCreatedAt(), user.getUpdatedAt());
+				user.getRole(), user.getStatus(), user.getCreatedAt(), user.getUpdatedAt(),
+				user.getGoogleSub() != null);
 	}
 }
