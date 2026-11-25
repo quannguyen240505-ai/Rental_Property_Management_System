@@ -11,6 +11,10 @@ spring:
   flyway:
     enabled: true
 
-  eureka:
-    client:
+  cloud:
+    discovery:
       enabled: false
+
+eureka:
+  client:
+    enabled: false
