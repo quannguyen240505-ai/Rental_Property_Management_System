@@ -1,6 +1,7 @@
 package com.rental.property.service;
 
 import com.rental.property.dto.request.CreateRoomHoldRequest;
+import com.rental.property.dto.request.UpdateRoomRequest;
 import com.rental.property.entity.Property;
 import com.rental.property.entity.Room;
 import com.rental.property.entity.RoomHold;
@@ -21,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("mysql-it")
 class RoomHoldConcurrencyMySqlIT {
     @Autowired RoomHoldService service;
+    @Autowired RoomService roomService;
     @Autowired PropertyRepository properties;
     @Autowired RoomRepository rooms;
     @Autowired ViewingAppointmentRepository viewings;
@@ -239,5 +242,52 @@ void receiptFreeHoldsCanBeCreatedForDifferentRooms() {
         assertTrue(fresh.getStatus() == RoomHoldStatus.CANCELLED
                 || fresh.getStatus() == RoomHoldStatus.EXPIRED);
         assertEquals(RoomStatus.AVAILABLE, rooms.findById(room.getId()).orElseThrow().getStatus());
+    }
+
+    /** Both operations must take the same room lock, so a metadata UPDATE cannot
+     * write stale status/published values over a committed room reservation.
+     */
+    @Test
+    void updateRoomAndCreateHoldAtOnce_preservesMetadataAndReservedStatus() throws Exception {
+        Room room = newRoom("H-RACE-UPD");
+        ViewingAppointment viewing = completed(room);
+        UpdateRoomRequest update = new UpdateRoomRequest("H-RACE-UPD",
+                "Updated while holding", "No lost status", 2,
+                new BigDecimal("23.50"), 2300000L);
+        List<Outcome> outcomes = race(
+                () -> roomService.updateRoom(room.getId(), update),
+                () -> service.create(request(viewing, null), owner, false));
+        assertEquals(2, outcomes.stream().filter(x -> x == Outcome.SUCCESS).count());
+        Room fresh = rooms.findById(room.getId()).orElseThrow();
+        assertEquals("Updated while holding", fresh.getTitle());
+        assertEquals("No lost status", fresh.getDescription());
+        assertEquals(RoomStatus.RESERVED_PENDING, fresh.getStatus());
+        assertEquals(1, holds.findByRoom_Property_IdOrderByCreatedAtDesc(propertyId).size());
+    }
+
+    /** Publishing state must be guarded by the same room-level mutex as creating a Hold. */
+    @Test
+    void unpublishAndCreateHoldAtOnce_roomIsReservedAndHidden() throws Exception {
+        Room room = newRoom("H-RACE-PUB");
+        ViewingAppointment viewing = completed(room);
+        List<Outcome> outcomes = race(
+                () -> roomService.setRoomPublished(room.getId(), false),
+                () -> service.create(request(viewing, null), owner, false));
+        assertEquals(2, outcomes.stream().filter(x -> x == Outcome.SUCCESS).count());
+        Room fresh = rooms.findById(room.getId()).orElseThrow();
+        assertEquals(RoomStatus.RESERVED_PENDING, fresh.getStatus());
+        assertEquals(false, fresh.getPublished());
+        assertEquals(1, holds.findByRoom_Property_IdOrderByCreatedAtDesc(propertyId).size());
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> roomService.getPublicRoomById(room.getId())).getStatusCode().value());
+    }
+
+    @Test
+    void publishAfterRoomHeld_rejectedWithoutChangingRoomStatus() {
+        Room room = newRoom("H-HELD-PUB");
+        createHold(room, null);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> roomService.setRoomPublished(room.getId(), true)).getStatusCode().value());
+        assertEquals(RoomStatus.RESERVED_PENDING, rooms.findById(room.getId()).orElseThrow().getStatus());
     }
 }

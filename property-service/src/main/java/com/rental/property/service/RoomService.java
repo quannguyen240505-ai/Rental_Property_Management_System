@@ -136,14 +136,14 @@ public class RoomService {
         return toResponse(room);
     }
 
-    // UPDATE ROOM
+    // UPDATE ROOM: share the row-level lock with Room Hold and Viewing.
     @Transactional
     public RoomResponse updateRoom(
             UUID id,
             UpdateRoomRequest request
     ) {
 
-        Room room = roomRepository.findById(id)
+        Room room = roomRepository.findForUpdateById(id)
                 .orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,
@@ -199,14 +199,14 @@ public class RoomService {
         return toResponse(updatedRoom);
     }
 
-    // PUBLISH OR UNPUBLISH ROOM
+    // PUBLISH OR UNPUBLISH ROOM: the availability check must run under the same lock.
     @Transactional
     public RoomResponse setRoomPublished(
             UUID id,
             boolean published
     ) {
 
-        Room room = roomRepository.findById(id)
+        Room room = roomRepository.findForUpdateById(id)
                 .orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,

@@ -17,7 +17,8 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
     List<Room> findByProperty_IdOrderByCodeAsc(UUID propertyId);
     List<Room> findByPublishedTrueAndStatusOrderByCodeAsc(RoomStatus status);
 
-    // Used only for serializing claims of different appointments at the same room/time.
+    // Shared room mutex for ALL write operations: update, publication, viewing and hold.
+    // Must be called inside an active @Transactional method. Read-only queries use findById.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from Room r where r.id = :id")
     Optional<Room> findForUpdateById(@Param("id") UUID id);
