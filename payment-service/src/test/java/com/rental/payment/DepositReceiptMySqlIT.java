@@ -101,6 +101,30 @@ class DepositReceiptMySqlIT {
         assertEquals(1L, countReceipts());
     }
 
+    @Test void concurrentOwnerVerificationWritesExactlyOneAudit() throws Exception {
+        var receipt = service.create(request(500000L), staff);
+        UUID ownerId = UUID.randomUUID();
+        var owner = new UsernamePasswordAuthenticationToken(ownerId.toString(), null,
+                List.of(new SimpleGrantedAuthority("ROLE_OWNER")));
+        var results = concurrently(() -> service.verifyOwner(receipt.id(), owner).status().name(),
+                () -> service.verifyOwner(receipt.id(), owner).status().name());
+        assertEquals(List.of("OWNER_VERIFIED", "OWNER_VERIFIED"), results);
+        assertEquals(1L, jdbc.queryForObject("SELECT COUNT(*) FROM deposit_receipt_audit_logs WHERE receipt_id = ?",
+                Long.class, receipt.id().toString()));
+        var audit = jdbc.queryForMap("""
+                SELECT changed_by, change_reason,
+                       JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.status')) AS old_status,
+                       JSON_UNQUOTE(JSON_EXTRACT(new_values, '$.status')) AS new_status
+                FROM deposit_receipt_audit_logs WHERE receipt_id = ?
+                """, receipt.id().toString());
+        assertEquals(ownerId.toString(), audit.get("changed_by"));
+        assertEquals("OWNER_VERIFICATION", audit.get("change_reason"));
+        assertEquals("REPORTED", audit.get("old_status"));
+        assertEquals("OWNER_VERIFIED", audit.get("new_status"));
+        assertEquals(ownerId.toString(), jdbc.queryForObject(
+                "SELECT owner_verified_by FROM deposit_receipts WHERE id = ?", String.class, receipt.id().toString()));
+    }
+
     private List<String> concurrently(Callable<String> a, Callable<String> b) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -137,6 +161,7 @@ class DepositReceiptMySqlIT {
     }
     @AfterEach void cleanOwnFixtures() {
         if (hold != null && jdbc != null) {
+            jdbc.update("DELETE FROM deposit_receipt_audit_logs WHERE receipt_id IN (SELECT id FROM deposit_receipts WHERE hold_id = ?)", hold.toString());
             jdbc.update("DELETE FROM deposit_receipts WHERE hold_id = ?", hold.toString());
             jdbc.update("DELETE FROM deposit_receipt_hold_locks WHERE hold_id = ?", hold.toString());
         }

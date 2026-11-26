@@ -120,6 +120,7 @@ public class DepositReceiptService {
         if (repository.verifyOwner(receiptId, owner) != 1) {
             throw error(HttpStatus.CONFLICT, "INVALID_RECEIPT_STATUS");
         }
+        repository.insertOwnerVerificationAudit(receiptId, owner, receipt.status());
         return DepositReceiptResponse.from(requireReceipt(receiptId));
     }
 
@@ -132,7 +133,8 @@ public class DepositReceiptService {
         validateResponse(receipt.holdId(), hold);
         requireMatchingHold(receipt, hold);
         var result = com.rental.payment.dto.response.RentalEligibilityResponse.from(receipt);
-        boolean usableHold = "APPROVED".equals(hold.holdStatus())
+        boolean usableHold = ("APPROVED".equals(hold.holdStatus())
+                    && "RESERVED".equals(hold.roomStatus()))
                 || ("PENDING_VERIFICATION".equals(hold.holdStatus())
                     && "RESERVED_PENDING".equals(hold.roomStatus())
                     && Instant.now().isBefore(hold.expiresAt().toInstant()));

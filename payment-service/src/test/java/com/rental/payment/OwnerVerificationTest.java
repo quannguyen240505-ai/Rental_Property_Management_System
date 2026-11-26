@@ -35,9 +35,13 @@ class OwnerVerificationTest {
     }
     @Test void ownerVerifiesAndPersistsIdentity() {
         when(repo.verifyOwner(id, ownerId)).thenReturn(1);
-        service.verifyOwner(id, owner);
-        verify(repo).verifyOwner(id, ownerId);
-        verify(repo).lockHold(holdId);
+        when(repo.findById(id)).thenReturn(Optional.of(receipt(DepositReceiptStatus.REPORTED)),
+                Optional.of(receipt(DepositReceiptStatus.OWNER_VERIFIED)));
+        assertEquals(DepositReceiptStatus.OWNER_VERIFIED, service.verifyOwner(id, owner).status());
+        var order = inOrder(repo);
+        order.verify(repo).lockHold(holdId);
+        order.verify(repo).verifyOwner(id, ownerId);
+        order.verify(repo).insertOwnerVerificationAudit(id, ownerId, DepositReceiptStatus.REPORTED);
     }
     @Test void staffCannotVerify() {
         var staff = new UsernamePasswordAuthenticationToken(ownerId.toString(), "", List.of(new SimpleGrantedAuthority("ROLE_STAFF")));
@@ -48,6 +52,7 @@ class OwnerVerificationTest {
         when(repo.findByHoldIdForUpdate(holdId)).thenReturn(Optional.of(receipt(DepositReceiptStatus.OWNER_VERIFIED)));
         assertEquals(DepositReceiptStatus.OWNER_VERIFIED, service.verifyOwner(id, owner).status());
         verify(repo, never()).verifyOwner(any(), any());
+        verify(repo, never()).insertOwnerVerificationAudit(any(), any(), any());
     }
     @Test void expiredHoldCannotBeVerified() {
         when(verifier.verifyForCollection(holdId, owner)).thenReturn(new VerifiedDepositHold(holdId, property,
@@ -63,8 +68,42 @@ class OwnerVerificationTest {
     @Test void verifiedIsRentalEligible() {
         when(repo.findById(id)).thenReturn(Optional.of(receipt(DepositReceiptStatus.OWNER_VERIFIED)));
         var response = service.rentalEligibility(id, owner);
-        assertTrue(response.verified()); assertEquals(1000000, response.amount());
+        assertTrue(response.verified()); assertTrue(response.eligible()); assertEquals(1000000, response.amount());
         assertEquals(holdId, response.holdId());
+    }
+    @Test void approvedReservedIsEligibleEvenAfterHoldExpiry() {
+        when(repo.findById(id)).thenReturn(Optional.of(receipt(DepositReceiptStatus.OWNER_VERIFIED)));
+        when(verifier.verifyForCollection(holdId, owner)).thenReturn(new VerifiedDepositHold(holdId, property,
+            room, customer, "APPROVED", "RESERVED", OffsetDateTime.now().minusHours(1), false, "INVALID_HOLD_STATUS"));
+        var response = service.rentalEligibility(id, owner);
+        assertTrue(response.verified());
+        assertTrue(response.eligible());
+        assertNull(response.reason());
+    }
+    @Test void inconsistentAndClosedHoldsAreNotEligible() {
+        when(repo.findById(id)).thenReturn(Optional.of(receipt(DepositReceiptStatus.OWNER_VERIFIED)));
+        for (String[] states : List.of(new String[]{"APPROVED", "AVAILABLE"},
+                new String[]{"APPROVED", "RESERVED_PENDING"}, new String[]{"CANCELLED", "RESERVED"},
+                new String[]{"EXPIRED", "RESERVED"}, new String[]{"PENDING_VERIFICATION", "RESERVED"})) {
+            when(verifier.verifyForCollection(holdId, owner)).thenReturn(new VerifiedDepositHold(holdId, property,
+                room, customer, states[0], states[1], OffsetDateTime.now().plusHours(1), false, "INVALID_HOLD_STATUS"));
+            var response = service.rentalEligibility(id, owner);
+            assertTrue(response.verified());
+            assertFalse(response.eligible(), states[0] + "/" + states[1]);
+            assertEquals("HOLD_NOT_ELIGIBLE", response.reason());
+        }
+    }
+    @Test void failedOwnerUpdateDoesNotWriteAudit() {
+        when(repo.verifyOwner(id, ownerId)).thenReturn(0);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.verifyOwner(id, owner)).getStatusCode().value());
+        verify(repo, never()).insertOwnerVerificationAudit(any(), any(), any());
+    }
+    @Test void customerConfirmedAuditUsesActualPreviousStatus() {
+        when(repo.findByHoldIdForUpdate(holdId)).thenReturn(Optional.of(receipt(DepositReceiptStatus.CUSTOMER_CONFIRMED)));
+        when(repo.verifyOwner(id, ownerId)).thenReturn(1);
+        service.verifyOwner(id, owner);
+        verify(repo).insertOwnerVerificationAudit(id, ownerId, DepositReceiptStatus.CUSTOMER_CONFIRMED);
     }
     @Test void propertyFailureIsNotBypassed() {
         when(verifier.verifyForCollection(holdId, owner)).thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));

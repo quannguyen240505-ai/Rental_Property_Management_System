@@ -89,6 +89,16 @@ public class DepositReceiptRepository {
                 """, owner.toString(), id.toString());
     }
 
+    public void insertOwnerVerificationAudit(UUID receiptId, UUID owner, DepositReceiptStatus previousStatus) {
+        jdbc.update("""
+                INSERT INTO deposit_receipt_audit_logs (
+                    id, receipt_id, changed_by, change_reason, old_values, new_values, changed_at
+                ) VALUES (?, ?, ?, ?, JSON_OBJECT('status', ?),
+                    JSON_OBJECT('status', 'OWNER_VERIFIED', 'owner_verified_by', ?), UTC_TIMESTAMP())
+                """, UUID.randomUUID().toString(), receiptId.toString(), owner.toString(),
+                "OWNER_VERIFICATION", previousStatus.name(), owner.toString());
+    }
+
     private DepositReceipt mapRow(ResultSet rs) throws SQLException {
         return new DepositReceipt(
                 UUID.fromString(rs.getString("id")),
