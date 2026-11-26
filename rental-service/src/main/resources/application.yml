@@ -27,6 +27,8 @@ app:
   auth:
     introspect-url: ${AUTH_INTROSPECT_URL:http://localhost:8081/internal/auth/introspect}
     service-key: ${AUTH_INTERNAL_SERVICE_KEY}
+  property:
+    base-url: ${PROPERTY_SERVICE_URL:http://localhost:8082}
 eureka:
   client:
     enabled: ${EUREKA_ENABLED:true}

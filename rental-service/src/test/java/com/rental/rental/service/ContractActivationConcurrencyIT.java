@@ -1,6 +1,7 @@
 package com.rental.rental.service;
 
 import com.rental.rental.exception.ContractConflictException;
+import com.rental.rental.access.RentalContractAccessService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.nio.ByteBuffer;
 import java.sql.Date;
@@ -25,6 +27,9 @@ class ContractActivationConcurrencyIT {
 
     @Autowired
     private ContractActivationService activationService;
+
+    @MockitoBean
+    private RentalContractAccessService contractAccessService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;

@@ -1,3 +1,4 @@
+
 name: Backend CI
 
 on:
@@ -40,18 +41,32 @@ jobs:
       AUTH_TEST_DB_URL: jdbc:mysql://127.0.0.1:3306/auth_test_db?useSSL=false&allowPublicKeyRetrieval=true
       AUTH_TEST_DB_USERNAME: auth_tester
       AUTH_TEST_DB_PASSWORD: ci_auth_password_only
+      RENTAL_TEST_DB_PASSWORD: ci_rental_password_only
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
+
+      - name: Prepare Rental Service test database
+        env:
+          MYSQL_PWD: ci_root_password_only
+        run: |
+          mysql -h 127.0.0.1 -u root <<'SQL'
+          CREATE DATABASE IF NOT EXISTS rental_test;
+          CREATE USER IF NOT EXISTS 'rental_tester'@'%' IDENTIFIED BY 'ci_rental_password_only';
+          GRANT ALL PRIVILEGES ON rental_test.* TO 'rental_tester'@'%';
+          SQL
+
       - name: Verify all Maven modules (Unit Tests)
         run: mvn -B -ntp -f pom.xml clean verify
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,6 +81,7 @@ jobs:
     name: Property MySQL Integration Tests (Java 25)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
     services:
       mysql:
         image: mysql:8.0
@@ -81,6 +97,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
+
     env:
       PROPERTY_TEST_DB_USERNAME: property_it_ci
       PROPERTY_TEST_DB_PASSWORD: ci_property_test_only
@@ -88,14 +105,17 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
+
       - name: Verify Property Unit and MySQL Integration Tests
         run: mvn -B -ntp -f pom.xml -pl property-service -am -Pmysql-it clean verify
+
       - name: Upload Property integration reports
         if: always()
         uses: actions/upload-artifact@v4
