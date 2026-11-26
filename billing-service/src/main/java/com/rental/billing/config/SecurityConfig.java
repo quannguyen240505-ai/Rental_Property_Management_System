@@ -1,74 +1,73 @@
 package com.rental.billing.config;
 
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 
-import javax.crypto.spec.SecretKeySpec;
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationServiceException;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.authentication.OpaqueTokenAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 
 @Configuration
 public class SecurityConfig {
 
     @Bean
-    public JwtDecoder jwtDecoder(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.issuer}") String issuer) {
+    public OpaqueTokenIntrospector tokenIntrospector(
+            @Value("${auth.base-url:http://localhost:8081}") String baseUrl,
+            @Value("${auth.service-key}") String serviceKey) {
 
-        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-
-        if (bytes.length < 32) {
-            throw new IllegalStateException(
-                    "JWT_SECRET phải có ít nhất 32 bytes");
-        }
-
-        var key = new SecretKeySpec(bytes, "HmacSHA256");
-
-        var decoder = NimbusJwtDecoder.withSecretKey(key)
-                .macAlgorithm(MacAlgorithm.HS256)
-                .build();
-
-        decoder.setJwtValidator(
-                JwtValidators.createDefaultWithIssuer(issuer));
-
-        return decoder;
-    }
-
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        var authorities = new JwtGrantedAuthoritiesConverter();
-        authorities.setAuthoritiesClaimName("roles");
-        authorities.setAuthorityPrefix("");
-
-        var converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authorities);
-
-        return converter;
+        return new AuthTokenIntrospector(baseUrl, serviceKey);
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            JwtAuthenticationConverter converter) throws Exception {
+            OpaqueTokenIntrospector introspector) throws Exception {
+
+        AuthenticationEntryPoint unauthorized =
+                (request, response, exception) -> {
+                    response.setHeader("WWW-Authenticate", "Bearer");
+                    writeError(response, 401, "UNAUTHORIZED");
+                };
+
+        var provider = new OpaqueTokenAuthenticationProvider(introspector);
+        var manager = new ProviderManager(provider);
+        var bearerFilter = new BearerTokenAuthenticationFilter(manager);
+
+        bearerFilter.setAuthenticationEntryPoint(unauthorized);
+        bearerFilter.setAuthenticationFailureHandler(
+                (request, response, exception) -> {
+                    if (exception instanceof AuthenticationServiceException) {
+                        writeError(response, 503, "AUTH_SERVICE_UNAVAILABLE");
+                    } else {
+                        unauthorized.commence(request, response, exception);
+                    }
+                });
 
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
+                .requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint(unauthorized)
+                        .accessDeniedHandler((request, response, exception) ->
+                                writeError(response, 403, "FORBIDDEN")))
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR)
                         .permitAll()
@@ -78,9 +77,19 @@ public class SecurityConfig {
                         .authenticated()
                         .anyRequest()
                         .denyAll())
-                .oauth2ResourceServer(oauth -> oauth
-                        .jwt(jwt -> jwt
-                                .jwtAuthenticationConverter(converter)))
+                .addFilterBefore(
+                        bearerFilter, AnonymousAuthenticationFilter.class)
                 .build();
+    }
+
+    private static void writeError(
+            HttpServletResponse response,
+            int status,
+            String code) throws IOException {
+
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write("{\"code\":\"" + code + "\"}");
     }
 }
