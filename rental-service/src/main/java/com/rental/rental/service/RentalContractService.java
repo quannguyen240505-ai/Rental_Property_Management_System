@@ -9,6 +9,7 @@ import com.rental.rental.exception.ContractConflictException;
 import com.rental.rental.repository.RentalContractRepository;
 import com.rental.rental.repository.TenantProfileRepository;
 import com.rental.rental.exception.ResourceNotFoundException;
+import com.rental.rental.access.RentalContractAccessService;
 
 import org.springframework.stereotype.Service;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,14 +26,18 @@ public class RentalContractService {
     private final RentalContractRepository contractRepository;
     private final TenantProfileRepository tenantRepository;
     private final PropertyVerificationClient propertyVerificationClient;
+    private final RentalContractAccessService contractAccessService;
 
     public RentalContractService(
             RentalContractRepository contractRepository,
-            TenantProfileRepository tenantRepository, PropertyVerificationClient propertyVerificationClient) {
+            TenantProfileRepository tenantRepository,
+            PropertyVerificationClient propertyVerificationClient,
+            RentalContractAccessService contractAccessService) {
 
         this.contractRepository = contractRepository;
         this.tenantRepository = tenantRepository;
         this.propertyVerificationClient = propertyVerificationClient;
+        this.contractAccessService = contractAccessService;
     }
 
     @Transactional
@@ -104,19 +109,36 @@ public class RentalContractService {
 
         RentalContract contract = contractRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Rental contract not found"));
+                        "Rental contract not found"
+                ));
+
+        // Verify access before returning contract data
+        contractAccessService.requireContractAccess(contract);
 
         return toResponse(contract);
     }
+
 
     @Transactional(readOnly = true)
     public List<RentalContractResponse> getAll() {
 
         return contractRepository.findAll()
                 .stream()
+                .filter(contract -> {
+                    try {
+                        contractAccessService.requireContractAccess(contract);
+                        return true;
+                    } catch (org.springframework.web.server.ResponseStatusException ex) {
+                        if (ex.getStatusCode().value() == 403) {
+                            return false;
+                        }
+                        throw ex;
+                    }
+                })
                 .map(this::toResponse)
                 .toList();
     }
+
 
     private RentalContractResponse toResponse(
             RentalContract contract) {

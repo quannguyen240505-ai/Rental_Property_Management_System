@@ -9,6 +9,8 @@ import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.CheckoutSettlementRepository;
 import com.rental.rental.repository.ContractDepositRepository;
 import com.rental.rental.repository.RentalContractRepository;
+import com.rental.rental.access.RentalContractAccessService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +30,8 @@ class CheckoutSettlementServiceTest {
     @Mock RentalContractRepository contracts;
     @Mock ContractDepositRepository deposits;
     @Mock CheckoutSettlementRepository settlements;
+    @Mock
+    RentalContractAccessService contractAccessService;
 
     private CheckoutSettlementService service;
     private RentalContract contract;
@@ -35,7 +39,12 @@ class CheckoutSettlementServiceTest {
 
     @BeforeEach
     void init() {
-        service = new CheckoutSettlementService(contracts, deposits, settlements);
+        service = new CheckoutSettlementService(
+                contracts,
+                deposits,
+                settlements,
+                contractAccessService
+        );
         contractId = UUID.randomUUID();
         contract = mock(RentalContract.class);
     }

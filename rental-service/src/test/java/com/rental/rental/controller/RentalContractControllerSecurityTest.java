@@ -78,16 +78,21 @@ class RentalContractControllerSecurityTest {
                 .andExpect(content().json("[]"));
     }
 
+
     @Test
-    void staff_getAll_returns403() throws Exception {
+    void staff_getAll_returns200() throws Exception {
         mockRole("staff-token", "STAFF");
+
+        when(contractService.getAll()).thenReturn(List.of());
 
         mvc.perform(get("/api/contracts")
                         .header("Authorization", "Bearer staff-token"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
 
-        verifyNoInteractions(contractService);
+        verify(contractService).getAll();
     }
+
 
     @Test
     void invalidToken_returns401() throws Exception {
@@ -221,18 +226,37 @@ class RentalContractControllerSecurityTest {
 
         verifyNoInteractions(checkoutService);
     }
+
     @Test
-    void staff_getContractDetail_returns403() throws Exception {
+    void staff_getContractDetail_returns200() throws Exception {
         mockRole("staff-token", "STAFF");
 
-        mvc.perform(
-                        get("/api/contracts/{id}", contractId)
-                                .header("Authorization", "Bearer staff-token")
-                )
-                .andExpect(status().isForbidden());
+        RentalContractResponse response =
+                new RentalContractResponse(
+                        contractId,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "DRAFT",
+                        java.time.LocalDate.of(2026, 12, 1),
+                        java.time.LocalDate.of(2027, 12, 1),
+                        3_000_000L,
+                        2_000_000L
+                );
 
-        verifyNoInteractions(contractService);
+        when(contractService.getById(contractId))
+                .thenReturn(response);
+
+        mvc.perform(get("/api/contracts/{id}", contractId)
+                        .header("Authorization", "Bearer staff-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id")
+                        .value(contractId.toString()))
+                .andExpect(jsonPath("$.status")
+                        .value("DRAFT"));
+
+        verify(contractService).getById(contractId);
     }
+
 
     @Test
     void staff_createContract_returns403() throws Exception {

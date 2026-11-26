@@ -6,6 +6,7 @@ import com.rental.rental.exception.ContractConflictException;
 import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.ContractDepositRepository;
 import com.rental.rental.repository.RentalContractRepository;
+import com.rental.rental.access.RentalContractAccessService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ class ContractActivationServiceTest {
 
     @Mock
     private RoomActivationLockManager roomLockManager;
+
+    @Mock
+    private RentalContractAccessService contractAccessService;
 
     @InjectMocks
     private ContractActivationService activationService;

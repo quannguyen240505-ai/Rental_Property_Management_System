@@ -59,7 +59,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/contracts"
-                        ).hasRole("OWNER")
+                        ).hasAnyRole("OWNER", "STAFF")
 
                         // Settlement: OWNER only
                         .requestMatchers(
@@ -71,7 +71,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                  HttpMethod.GET,
                                  "/api/contracts/**"
-                        ).hasRole("OWNER")
+                        ).hasAnyRole("OWNER", "STAFF")
 
                         // Activate contract: OWNER only
                         .requestMatchers(
