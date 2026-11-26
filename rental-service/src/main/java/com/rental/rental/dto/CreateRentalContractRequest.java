@@ -18,7 +18,27 @@ public record CreateRentalContractRequest(
 
         @NotNull @PositiveOrZero Long rentAmount,
 
-        @NotNull @PositiveOrZero Long depositRequired
+        @NotNull @PositiveOrZero Long depositRequired,
+
+        UUID holdId
 
 ) {
+    public CreateRentalContractRequest(
+            UUID roomId,
+            UUID tenantProfileId,
+            LocalDate startDate,
+            LocalDate endDate,
+            Long rentAmount,
+            Long depositRequired
+    ) {
+        this(
+                roomId,
+                tenantProfileId,
+                startDate,
+                endDate,
+                rentAmount,
+                depositRequired,
+                null
+        );
+    }
 }

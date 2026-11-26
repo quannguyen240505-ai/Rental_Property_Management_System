@@ -16,6 +16,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import com.rental.rental.property.PropertyVerificationClient;
 import org.springframework.transaction.annotation.Transactional;
+import com.rental.rental.property.RoomContractEligibilityResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -76,6 +79,13 @@ public class RentalContractService {
         propertyVerificationClient.verifyRoomAccess(
                 request.roomId(), ownerUserId
         );
+        RoomContractEligibilityResponse eligibility =
+                propertyVerificationClient.getContractEligibility(
+                        request.roomId(),
+                        ownerUserId
+                );
+
+        validateContractEligibility(request, tenant, eligibility);
         boolean hasOverlap = contractRepository.existsOverlappingContract(
                 request.roomId(),
                 request.startDate(),
@@ -92,6 +102,7 @@ public class RentalContractService {
         RentalContract contract = new RentalContract();
 
         contract.setRoomId(request.roomId());
+        contract.setHoldId(request.holdId());
         contract.setTenantProfile(tenant);
         contract.setStartDate(request.startDate());
         contract.setEndDate(request.endDate());
@@ -151,6 +162,74 @@ public class RentalContractService {
                 contract.getStartDate(),
                 contract.getEndDate(),
                 contract.getRentAmount(),
-                contract.getDepositRequired());
+                contract.getDepositRequired(),
+                contract.getHoldId()
+        );
     }
+
+    private void validateContractEligibility(
+            CreateRentalContractRequest request,
+            TenantProfile tenant,
+            RoomContractEligibilityResponse eligibility
+    ) {
+        if (eligibility == null
+                || eligibility.roomId() == null
+                || !request.roomId().equals(eligibility.roomId())
+                || eligibility.propertyId() == null
+                || eligibility.roomStatus() == null
+                || eligibility.eligible() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Invalid Property eligibility response"
+            );
+        }
+
+        if (!eligibility.eligible()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Room is not eligible for contract creation"
+            );
+        }
+
+        switch (eligibility.roomStatus()) {
+            case "AVAILABLE" -> {
+                if (request.holdId() != null
+                        || Boolean.TRUE.equals(eligibility.requiresHoldId())
+                        || eligibility.holdId() != null) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "AVAILABLE room must not use a Hold"
+                    );
+                }
+            }
+
+            case "RESERVED" -> {
+                if (!Boolean.TRUE.equals(eligibility.requiresHoldId())
+                        || request.holdId() == null
+                        || eligibility.holdId() == null
+                        || !request.holdId().equals(eligibility.holdId())
+                        || !"APPROVED".equals(eligibility.holdStatus())
+                        || eligibility.customerId() == null
+                        || tenant.getUserId() == null
+                        || !tenant.getUserId().equals(eligibility.customerId())) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Approved Hold and matching customer required"
+                    );
+                }
+            }
+
+            case "RESERVED_PENDING", "OCCUPIED" ->
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Room is not available for contract creation"
+                    );
+
+            default -> throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Unknown room status from Property Service"
+            );
+        }
+    }
+
 }
