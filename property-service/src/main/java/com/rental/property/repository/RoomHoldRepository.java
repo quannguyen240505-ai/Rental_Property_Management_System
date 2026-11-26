@@ -14,6 +14,8 @@ import java.util.UUID;
 public interface RoomHoldRepository extends JpaRepository<RoomHold, UUID> {
     boolean existsByViewing_Id(UUID viewingId);
     boolean existsByReceiptReference(String receiptReference);
+    // Used by Rental DRAFT eligibility to find the approved Hold for a room.
+    List<RoomHold> findByRoom_IdAndStatus(UUID roomId, com.rental.property.entity.RoomHoldStatus status);
 
     List<RoomHold> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
     List<RoomHold> findByRoom_Property_IdOrderByCreatedAtDesc(UUID propertyId);
