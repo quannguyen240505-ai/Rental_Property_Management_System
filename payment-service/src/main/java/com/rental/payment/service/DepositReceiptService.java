@@ -92,6 +92,72 @@ public class DepositReceiptService {
         return DepositReceiptResponse.from(receipt);
     }
 
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public DepositReceiptResponse verifyOwner(UUID receiptId, Authentication authentication) {
+        UUID owner = requireCollector(authentication);
+        if (authentication.getAuthorities().stream().noneMatch(a -> "ROLE_OWNER".equals(a.getAuthority()))) {
+            throw error(HttpStatus.FORBIDDEN, "FORBIDDEN");
+        }
+        var receipt = requireReceipt(receiptId);
+        repository.lockHold(receipt.holdId());
+        receipt = repository.findByHoldIdForUpdate(receipt.holdId()).orElseThrow(() ->
+                error(HttpStatus.NOT_FOUND, "RECEIPT_NOT_FOUND"));
+        var hold = holdVerifier.verifyForCollection(receipt.holdId(), authentication);
+        validateResponse(receipt.holdId(), hold);
+        requireMatchingHold(receipt, hold);
+        if (receipt.status() == DepositReceiptStatus.OWNER_VERIFIED) {
+            return DepositReceiptResponse.from(receipt);
+        }
+        if (receipt.status() != DepositReceiptStatus.REPORTED
+                && receipt.status() != DepositReceiptStatus.CUSTOMER_CONFIRMED) {
+            throw error(HttpStatus.CONFLICT, "INVALID_RECEIPT_STATUS");
+        }
+        if (!hold.eligible() || !"PENDING_VERIFICATION".equals(hold.holdStatus())
+                || !"RESERVED_PENDING".equals(hold.roomStatus())
+                || !Instant.now().isBefore(hold.expiresAt().toInstant())) {
+            throw error(HttpStatus.CONFLICT, "HOLD_NOT_ELIGIBLE");
+        }
+        if (repository.verifyOwner(receiptId, owner) != 1) {
+            throw error(HttpStatus.CONFLICT, "INVALID_RECEIPT_STATUS");
+        }
+        return DepositReceiptResponse.from(requireReceipt(receiptId));
+    }
+
+    public com.rental.payment.dto.response.RentalEligibilityResponse rentalEligibility(
+            UUID receiptId, Authentication authentication) {
+        requireCollector(authentication);
+        var receipt = requireReceipt(receiptId);
+        // Property checks current OWNER/STAFF scope even after a Hold is approved.
+        var hold = holdVerifier.verifyForCollection(receipt.holdId(), authentication);
+        validateResponse(receipt.holdId(), hold);
+        requireMatchingHold(receipt, hold);
+        var result = com.rental.payment.dto.response.RentalEligibilityResponse.from(receipt);
+        boolean usableHold = "APPROVED".equals(hold.holdStatus())
+                || ("PENDING_VERIFICATION".equals(hold.holdStatus())
+                    && "RESERVED_PENDING".equals(hold.roomStatus())
+                    && Instant.now().isBefore(hold.expiresAt().toInstant()));
+        if (result.verified() && !usableHold) {
+            return new com.rental.payment.dto.response.RentalEligibilityResponse(
+                    result.receiptId(), result.receiptReference(), result.holdId(), result.propertyId(),
+                    result.roomId(), result.customerId(), result.amount(), result.status(),
+                    true, false, "HOLD_NOT_ELIGIBLE");
+        }
+        return result;
+    }
+
+    private DepositReceipt requireReceipt(UUID id) {
+        return repository.findById(id).orElseThrow(() ->
+                error(HttpStatus.NOT_FOUND, "RECEIPT_NOT_FOUND"));
+    }
+
+    private void requireMatchingHold(DepositReceipt receipt, VerifiedDepositHold hold) {
+        if (!receipt.propertyId().equals(hold.propertyId())
+                || !receipt.roomId().equals(hold.roomId())
+                || !receipt.customerId().equals(hold.customerId())) {
+            throw error(HttpStatus.CONFLICT, "RECEIPT_HOLD_MISMATCH");
+        }
+    }
+
     private void validateResponse(UUID holdId, VerifiedDepositHold hold) {
         if (hold == null || !holdId.equals(hold.holdId()) || hold.propertyId() == null
                 || hold.roomId() == null || hold.customerId() == null || hold.eligible() == null

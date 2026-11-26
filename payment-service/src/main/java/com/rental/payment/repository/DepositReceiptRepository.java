@@ -80,6 +80,15 @@ public class DepositReceiptRepository {
                 .findFirst();
     }
 
+    public int verifyOwner(UUID id, UUID owner) {
+        return jdbc.update("""
+                UPDATE deposit_receipts SET status = 'OWNER_VERIFIED',
+                    owner_verified_by = ?, owner_verified_at = UTC_TIMESTAMP(),
+                    updated_at = UTC_TIMESTAMP()
+                WHERE id = ? AND status IN ('REPORTED', 'CUSTOMER_CONFIRMED')
+                """, owner.toString(), id.toString());
+    }
+
     private DepositReceipt mapRow(ResultSet rs) throws SQLException {
         return new DepositReceipt(
                 UUID.fromString(rs.getString("id")),

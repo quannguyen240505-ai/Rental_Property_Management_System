@@ -32,4 +32,17 @@ public class DepositReceiptController {
 
         return service.create(request, authentication);
     }
+    @PostMapping("/{receiptId}/verify")
+    public DepositReceiptResponse verify(
+            @org.springframework.web.bind.annotation.PathVariable java.util.UUID receiptId,
+            Authentication authentication) {
+        return service.verifyOwner(receiptId, authentication);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/{receiptId}/rental-eligibility")
+    public com.rental.payment.dto.response.RentalEligibilityResponse eligibility(
+            @org.springframework.web.bind.annotation.PathVariable java.util.UUID receiptId,
+            Authentication authentication) {
+        return service.rentalEligibility(receiptId, authentication);
+    }
 }
