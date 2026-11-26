@@ -1,3 +1,4 @@
+
 name: Backend CI
 
 on:
@@ -15,6 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ==========================================
+  # JOB 1: Build and Unit Tests
+  # ==========================================
   build-and-test:
     name: Build and Unit Tests (Java 25)
     runs-on: ubuntu-latest
@@ -44,14 +48,17 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
+
       - name: Verify all Maven modules (Unit Tests)
         run: mvn -B -ntp -f pom.xml clean verify
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,10 +69,14 @@ jobs:
             **/target/failsafe-reports/**
           if-no-files-found: ignore
 
+  # ==========================================
+  # JOB 2: Property MySQL Integration Tests
+  # ==========================================
   property-mysql-it:
     name: Property MySQL Integration Tests (Java 25)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
     services:
       mysql:
         image: mysql:8.0
@@ -81,6 +92,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
+
     env:
       PROPERTY_TEST_DB_USERNAME: property_it_ci
       PROPERTY_TEST_DB_PASSWORD: ci_property_test_only
@@ -88,14 +100,17 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
+
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
+
       - name: Verify Property Unit and MySQL Integration Tests
         run: mvn -B -ntp -f pom.xml -pl property-service -am -Pmysql-it clean verify
+
       - name: Upload Property integration reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -104,4 +119,55 @@ jobs:
           path: |
             property-service/target/surefire-reports/**
             property-service/target/failsafe-reports/**
+          if-no-files-found: ignore
+
+  # ==========================================
+  # JOB 3: Rental MySQL Integration Tests
+  # ==========================================
+  rental-mysql-it:
+    name: Rental MySQL Integration Tests (Java 25)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_rental_root_only
+          MYSQL_DATABASE: rental_test
+          MYSQL_USER: rental_tester
+          MYSQL_PASSWORD: ci_rental_test_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -pci_rental_root_only"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      RENTAL_TEST_DB_PASSWORD: ci_rental_test_only
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Run Rental Unit and MySQL Integration Tests
+        run: mvn -B -ntp -f pom.xml -pl rental-service -am -Pmysql-it clean verify
+
+      - name: Upload Rental test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rental-mysql-it-reports
+          path: |
+            rental-service/target/surefire-reports/**
+            rental-service/target/failsafe-reports/**
           if-no-files-found: ignore
