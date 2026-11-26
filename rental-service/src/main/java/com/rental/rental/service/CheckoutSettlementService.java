@@ -10,9 +10,12 @@ import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.CheckoutSettlementRepository;
 import com.rental.rental.repository.ContractDepositRepository;
 import com.rental.rental.repository.RentalContractRepository;
+import com.rental.rental.access.RentalContractAccessService;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.UUID;
 
 @Service
@@ -20,14 +23,18 @@ public class CheckoutSettlementService {
     private final RentalContractRepository contractRepository;
     private final ContractDepositRepository depositRepository;
     private final CheckoutSettlementRepository settlementRepository;
+    private final RentalContractAccessService contractAccessService;
 
     public CheckoutSettlementService(
             RentalContractRepository contractRepository,
             ContractDepositRepository depositRepository,
-            CheckoutSettlementRepository settlementRepository) {
+            CheckoutSettlementRepository settlementRepository,
+            RentalContractAccessService contractAccessService) {
+
         this.contractRepository = contractRepository;
         this.depositRepository = depositRepository;
         this.settlementRepository = settlementRepository;
+        this.contractAccessService = contractAccessService;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -45,6 +52,8 @@ public class CheckoutSettlementService {
         // Row lock serializes concurrent checkout requests for the same contract.
         RentalContract contract = contractRepository.findByIdForUpdate(contractId)
                 .orElseThrow(() -> new ResourceNotFoundException("Rental contract not found"));
+        // Verify contract access before processing checkout.
+        contractAccessService.requireContractAccess(contract);
         if (contract.getStatus() != ContractStatus.ACTIVE) {
             throw new ContractConflictException("Only ACTIVE contracts can be checked out");
         }
@@ -74,8 +83,21 @@ public class CheckoutSettlementService {
 
     @Transactional(readOnly = true)
     public CheckoutSettlementResponse getByContractId(UUID contractId) {
-        CheckoutSettlement settlement = settlementRepository.findByContract_Id(contractId)
-                .orElseThrow(() -> new ResourceNotFoundException("Checkout settlement not found"));
+
+        RentalContract contract = contractRepository.findById(contractId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Rental contract not found"
+                ));
+
+        // Verify permission before accessing settlement data.
+        contractAccessService.requireContractAccess(contract);
+
+        CheckoutSettlement settlement = settlementRepository
+                .findByContract_Id(contractId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Checkout settlement not found"
+                ));
+
         return toResponse(settlement);
     }
 

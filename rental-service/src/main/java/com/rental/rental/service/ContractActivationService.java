@@ -6,6 +6,7 @@ import com.rental.rental.exception.ContractConflictException;
 import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.ContractDepositRepository;
 import com.rental.rental.repository.RentalContractRepository;
+import com.rental.rental.access.RentalContractAccessService;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,15 +21,18 @@ public class ContractActivationService {
     private final RentalContractRepository contractRepository;
     private final ContractDepositRepository depositRepository;
     private final RoomActivationLockManager roomLockManager;
+    private final RentalContractAccessService contractAccessService;
 
     public ContractActivationService(
             RentalContractRepository contractRepository,
             ContractDepositRepository depositRepository,
-            RoomActivationLockManager roomLockManager
+            RoomActivationLockManager roomLockManager,
+            RentalContractAccessService contractAccessService
     ) {
         this.contractRepository = contractRepository;
         this.depositRepository = depositRepository;
         this.roomLockManager = roomLockManager;
+        this.contractAccessService = contractAccessService;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -39,6 +43,8 @@ public class ContractActivationService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Rental contract not found"
                 ));
+        // Verify permission before activating the contract.
+        contractAccessService.requireContractAccess(contract);
 
         if (contract.getStatus() != ContractStatus.DRAFT) {
             throw new ContractConflictException(

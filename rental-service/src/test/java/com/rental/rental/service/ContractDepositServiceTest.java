@@ -5,6 +5,7 @@ import com.rental.rental.entity.RentalContract;
 import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.ContractDepositRepository;
 import com.rental.rental.repository.RentalContractRepository;
+import com.rental.rental.access.RentalContractAccessService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,8 @@ class ContractDepositServiceTest {
 
         depositService = new ContractDepositService(
                 depositRepository,
-                contractRepository
+                contractRepository,
+                mock(RentalContractAccessService.class)
         );
 
         contractId = UUID.randomUUID();

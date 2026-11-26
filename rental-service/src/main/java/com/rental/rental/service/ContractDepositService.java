@@ -5,6 +5,7 @@ import com.rental.rental.entity.RentalContract;
 import com.rental.rental.exception.ResourceNotFoundException;
 import com.rental.rental.repository.ContractDepositRepository;
 import com.rental.rental.repository.RentalContractRepository;
+import com.rental.rental.access.RentalContractAccessService;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,13 +17,16 @@ public class ContractDepositService {
 
     private final ContractDepositRepository depositRepository;
     private final RentalContractRepository contractRepository;
+    private final RentalContractAccessService contractAccessService;
 
     public ContractDepositService(
             ContractDepositRepository depositRepository,
-            RentalContractRepository contractRepository
+            RentalContractRepository contractRepository,
+            RentalContractAccessService contractAccessService
     ) {
         this.depositRepository = depositRepository;
         this.contractRepository = contractRepository;
+        this.contractAccessService = contractAccessService;
     }
 
     @Transactional(readOnly = true)
@@ -32,6 +36,7 @@ public class ContractDepositService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Rental contract not found"
                 ));
+        contractAccessService.requireContractAccess(contract);
 
         Long applied = depositRepository
                 .sumAppliedAmountByContractId(contractId);

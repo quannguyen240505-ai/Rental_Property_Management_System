@@ -69,15 +69,20 @@ public class RentalContractController {
         return ResponseEntity.ok(responses);
     }
 
+
     @GetMapping("/{id}/deposit-summary")
     public ResponseEntity<DepositSummaryResponse> getDepositSummary(
             @PathVariable UUID id
     ) {
+        // Verify contract access before exposing deposit information.
+        contractService.getById(id);
+
         DepositSummaryResponse response =
                 depositService.getDepositSummary(id);
 
         return ResponseEntity.ok(response);
     }
+
 
     @PostMapping("/{id}/activate")
     public ResponseEntity<RentalContractResponse> activate(
@@ -101,4 +106,3 @@ public class RentalContractController {
         return ResponseEntity.ok(checkoutService.getByContractId(id));
     }
 }
-
