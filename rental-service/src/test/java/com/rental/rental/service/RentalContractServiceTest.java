@@ -11,6 +11,8 @@ import com.rental.rental.repository.RentalContractRepository;
 import com.rental.rental.repository.TenantProfileRepository;
 import com.rental.rental.property.PropertyVerificationClient;
 import com.rental.rental.access.RentalContractAccessService;
+import com.rental.rental.property.RoomContractEligibilityResponse;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -67,6 +69,20 @@ class RentalContractServiceTest {
 
         roomId = UUID.randomUUID();
         tenantId = UUID.randomUUID();
+
+        when(propertyVerificationClient.getContractEligibility(
+                eq(roomId), eq("owner-test-id")
+        )).thenReturn(new RoomContractEligibilityResponse(
+                roomId,
+                UUID.randomUUID(),
+                "AVAILABLE",
+                true,
+                null,
+                false,
+                null,
+                null,
+                null
+        ));
 
         request = new CreateRentalContractRequest(
                 roomId,
@@ -454,6 +470,228 @@ class RentalContractServiceTest {
                 HttpStatus.SERVICE_UNAVAILABLE,
                 exception.getStatusCode()
         );
+    }
+
+    @Test
+    void createDraft_reservedWithApprovedHold_success() {
+        UUID holdId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+
+        TenantProfile tenant = new TenantProfile();
+        tenant.setFullName("Nguyen Van A");
+        ReflectionTestUtils.setField(tenant, "userId", customerId);
+
+        CreateRentalContractRequest reservedRequest =
+                new CreateRentalContractRequest(
+                        roomId,
+                        tenantId,
+                        LocalDate.of(2026, 12, 1),
+                        LocalDate.of(2027, 12, 1),
+                        2_000_000L,
+                        2_000_000L,
+                        holdId
+                );
+
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+
+        when(propertyVerificationClient.getContractEligibility(
+                roomId, "owner-test-id"
+        )).thenReturn(new RoomContractEligibilityResponse(
+                roomId,
+                UUID.randomUUID(),
+                "RESERVED",
+                true,
+                null,
+                true,
+                holdId,
+                "APPROVED",
+                customerId
+        ));
+
+        when(contractRepository.save(any(RentalContract.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        RentalContractResponse response =
+                contractService.createDraft(reservedRequest);
+
+        ArgumentCaptor<RentalContract> captor =
+                ArgumentCaptor.forClass(RentalContract.class);
+
+        verify(contractRepository).save(captor.capture());
+
+        RentalContract saved = captor.getValue();
+
+        assertEquals(ContractStatus.DRAFT, saved.getStatus());
+        assertEquals(holdId, saved.getHoldId());
+        assertEquals(holdId, response.holdId());
+    }
+
+    @Test
+    void createDraft_reservedWithWrongHold_rejected() {
+        UUID requestedHoldId = UUID.randomUUID();
+        UUID approvedHoldId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+
+        TenantProfile tenant = new TenantProfile();
+        tenant.setFullName("Nguyen Van A");
+        ReflectionTestUtils.setField(tenant, "userId", customerId);
+
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+
+        when(propertyVerificationClient.getContractEligibility(
+                roomId, "owner-test-id"
+        )).thenReturn(new RoomContractEligibilityResponse(
+                roomId,
+                UUID.randomUUID(),
+                "RESERVED",
+                true,
+                null,
+                true,
+                approvedHoldId,
+                "APPROVED",
+                customerId
+        ));
+
+        CreateRentalContractRequest wrongHoldRequest =
+                new CreateRentalContractRequest(
+                        roomId,
+                        tenantId,
+                        LocalDate.of(2026, 12, 1),
+                        LocalDate.of(2027, 12, 1),
+                        2_000_000L,
+                        2_000_000L,
+                        requestedHoldId
+                );
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> contractService.createDraft(wrongHoldRequest)
+        );
+
+        assertEquals(
+                HttpStatus.CONFLICT,
+                exception.getStatusCode()
+        );
+
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+
+    @Test
+    void createDraft_reservedWithWrongCustomer_rejected() {
+        UUID holdId = UUID.randomUUID();
+        UUID tenantUserId = UUID.randomUUID();
+        UUID holdCustomerId = UUID.randomUUID();
+
+        TenantProfile tenant = new TenantProfile();
+        tenant.setFullName("Nguyen Van A");
+        ReflectionTestUtils.setField(tenant, "userId", tenantUserId);
+
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+
+        when(propertyVerificationClient.getContractEligibility(
+                roomId, "owner-test-id"
+        )).thenReturn(new RoomContractEligibilityResponse(
+                roomId,
+                UUID.randomUUID(),
+                "RESERVED",
+                true,
+                null,
+                true,
+                holdId,
+                "APPROVED",
+                holdCustomerId
+        ));
+
+        CreateRentalContractRequest reservedRequest =
+                new CreateRentalContractRequest(
+                        roomId,
+                        tenantId,
+                        LocalDate.of(2026, 12, 1),
+                        LocalDate.of(2027, 12, 1),
+                        2_000_000L,
+                        2_000_000L,
+                        holdId
+                );
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> contractService.createDraft(reservedRequest)
+        );
+
+        assertEquals(
+                HttpStatus.CONFLICT,
+                exception.getStatusCode()
+        );
+
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+
+    @Test
+    void createDraft_reservedPending_rejected() {
+        assertRoomIneligible("RESERVED_PENDING", false);
+    }
+
+    @Test
+    void createDraft_occupied_rejected() {
+        assertRoomIneligible("OCCUPIED", false);
+    }
+
+    @Test
+    void createDraft_availableButNotEligible_rejected() {
+        assertRoomIneligible("AVAILABLE", false);
+    }
+
+    private void assertRoomIneligible(
+            String roomStatus,
+            boolean eligible
+    ) {
+        TenantProfile tenant = new TenantProfile();
+        tenant.setFullName("Nguyen Van A");
+
+        when(tenantRepository.findById(tenantId))
+                .thenReturn(Optional.of(tenant));
+
+        when(propertyVerificationClient.getContractEligibility(
+                roomId, "owner-test-id"
+        )).thenReturn(new RoomContractEligibilityResponse(
+                roomId,
+                UUID.randomUUID(),
+                roomStatus,
+                eligible,
+                "Room is not eligible",
+                false,
+                null,
+                null,
+                null
+        ));
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> contractService.createDraft(request)
+        );
+
+        assertEquals(
+                HttpStatus.CONFLICT,
+                exception.getStatusCode()
+        );
+
+        verify(contractRepository, never())
+                .save(any(RentalContract.class));
+    }
+
+    @Test
+    void createDraft_reservedPendingEvenIfEligible_rejected() {
+        assertRoomIneligible("RESERVED_PENDING", true);
+    }
+
+    @Test
+    void createDraft_occupiedEvenIfEligible_rejected() {
+        assertRoomIneligible("OCCUPIED", true);
     }
 
 }

@@ -19,6 +19,9 @@ public class RentalContract {
     @Column(name = "room_id", nullable = false)
     private UUID roomId;
 
+    @Column(name = "hold_id", unique = true)
+    private UUID holdId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "tenant_profile_id", nullable = false)
     private TenantProfile tenantProfile;
@@ -124,5 +127,13 @@ public class RentalContract {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public UUID getHoldId() {
+        return holdId;
+    }
+
+    public void setHoldId(UUID holdId) {
+        this.holdId = holdId;
     }
 }
