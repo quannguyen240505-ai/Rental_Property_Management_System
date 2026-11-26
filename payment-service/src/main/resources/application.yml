@@ -25,6 +25,10 @@ management:
   endpoint:
     health:
       show-details: never
+auth:
+  base-url: ${AUTH_BASE_URL:http://localhost:8081}
+  service-key: ${AUTH_INTERNAL_SERVICE_KEY}
+
 eureka:
   client:
     enabled: ${EUREKA_ENABLED:true}
@@ -32,4 +36,4 @@ eureka:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
 
   instance:
-      prefer-ip-address: true
+    prefer-ip-address: true
