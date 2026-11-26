@@ -17,11 +17,11 @@ spring:
               predicates:
                 - Path=/api/auth/**,/api/users,/api/users/**
 
-            # Property / Room / Public Homepage / Viewing
+            # Property / Room / Viewing / Room Hold
             - id: property-service
               uri: lb://PROPERTY-SERVICE
               predicates:
-                - Path=/api/properties,/api/properties/**,/api/rooms,/api/rooms/**,/api/public/rooms,/api/public/rooms/**,/api/viewing-appointments,/api/viewing-appointments/**
+                - Path=/api/properties,/api/properties/**,/api/rooms,/api/rooms/**,/api/public/rooms,/api/public/rooms/**,/api/viewing-appointments,/api/viewing-appointments/**,/api/viewings,/api/viewings/**,/api/room-holds,/api/room-holds/**
 
             # Rental / Contracts / Tenant Profiles
             - id: rental-service
@@ -29,7 +29,7 @@ spring:
               predicates:
                 - Path=/api/rental-contracts,/api/rental-contracts/**,/api/contracts,/api/contracts/**,/api/tenant-profiles,/api/tenant-profiles/**,/api/extension-requests,/api/extension-requests/**,/api/move-out-requests,/api/move-out-requests/**
 
-            # Dashboard / Reports - Sáng phụ trách
+            # Dashboard / Reports
             - id: rental-reports
               uri: lb://RENTAL-SERVICE
               predicates:
@@ -41,11 +41,11 @@ spring:
               predicates:
                 - Path=/api/meter-readings,/api/meter-readings/**,/api/invoices,/api/invoices/**,/api/debts,/api/debts/**
 
-            # Payment
+            # Payment / Deposit Receipts
             - id: payment-service
               uri: lb://PAYMENT-SERVICE
               predicates:
-                - Path=/api/payments,/api/payments/**
+                - Path=/api/payments,/api/payments/**,/api/deposit-receipts,/api/deposit-receipts/**
 
             # Notification
             - id: notification-service
@@ -53,7 +53,7 @@ spring:
               predicates:
                 - Path=/api/notifications,/api/notifications/**
 
-          # Strip client-supplied internal identity/service headers.
+          # Remove untrusted internal headers
           default-filters:
             - RemoveRequestHeader=X-Service-Key
             - RemoveRequestHeader=X-User-Id
@@ -71,10 +71,10 @@ eureka:
 
 app:
   auth:
-    # Direct internal communication, not a public Gateway route.
+    # Internal Auth Service connection
     base-url: ${AUTH_INTERNAL_BASE_URL:http://localhost:8081}
 
-    # Must match AUTH_INTERNAL_SERVICE_KEY on Auth Service.
+    # Shared internal service key
     internal-service-key: ${AUTH_INTERNAL_SERVICE_KEY}
 
   cors:
